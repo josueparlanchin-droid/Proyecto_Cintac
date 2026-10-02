@@ -1,0 +1,24 @@
+{
+  "name": "cintac-comex-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Interfaz del Cotizador Logistico de Importaciones Comex - Cintac S.A.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "verificar": "node scripts/verificar-frontend.js"
+  },
+  "dependencies": {
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.18.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.2"
+  }
+}

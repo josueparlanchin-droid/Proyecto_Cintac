@@ -1,0 +1,111 @@
+/**
+ * styles/base.css
+ * -----------------------------------------------------------------
+ * Reset minimo y estilos globales. Se apoya en los tokens de tokens.css.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--fuente);
+  font-size: var(--texto-base);
+  line-height: 1.55;
+  color: var(--gris-oscuro);
+  background-color: var(--fondo);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+  font-weight: 650;
+  color: var(--gris-oscuro);
+}
+
+h1 { font-size: var(--texto-2xl); }
+h2 { font-size: var(--texto-xl); }
+h3 { font-size: var(--texto-lg); }
+h4 { font-size: var(--texto-md); }
+
+p { margin-bottom: var(--esp-3); }
+
+a {
+  color: var(--terracota);
+  text-decoration: none;
+  transition: color var(--transicion);
+}
+
+a:hover { color: var(--terracota-oscuro); }
+
+ul { list-style: none; }
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: var(--texto-base);
+  color: var(--gris-oscuro);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* Foco visible solo por teclado: accesible y no molesta al usar el mouse. */
+:focus-visible {
+  outline: 2px solid var(--terracota);
+  outline-offset: 2px;
+  border-radius: var(--radio-sm);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Texto solo para lectores de pantalla. */
+.sr-solo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

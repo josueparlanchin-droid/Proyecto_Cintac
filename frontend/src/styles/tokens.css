@@ -1,0 +1,96 @@
+/**
+ * styles/tokens.css
+ * -----------------------------------------------------------------
+ * Paleta corporativa de Cintac S.A. y escalas derivadas.
+ *
+ * Usar variables CSS en vez de escribir el color literal en cada componente
+ * permite que toda la interfaz cambie de identidad visual editando este
+ * archivo unicamente. Es el equivalente CSS de las variables de entorno
+ * del backend.
+ */
+
+:root {
+  /* --- Colores corporativos --- */
+  --terracota: #c85a32;
+  --terracota-oscuro: #a8451f;
+  --terracota-claro: #e07a52;
+  --naranjo: #e65100;
+  --naranjo-claro: #f57c00;
+
+  --gris-oscuro: #2b2b2b;
+  --gris-medio: #4a4a4a;
+  --gris-claro: #6b6b6b;
+  --gris-humo: #9a9a9a;
+
+  --blanco: #ffffff;
+  --blanco-hueso: #f7f6f4;
+
+  /* --- Superficies --- */
+  --fondo: #f2f0ee;
+  --superficie: #ffffff;
+  --superficie-alterna: #faf9f8;
+  --borde: #e0ddd9;
+  --borde-fuerte: #c9c4be;
+
+  /* --- Semanticos --- */
+  --exito: #1b7a4b;
+  --exito-fondo: #e8f5ee;
+  --advertencia: #b26a00;
+  --advertencia-fondo: #fdf3e2;
+  --error: #b3261e;
+  --error-fondo: #fceceb;
+  --info: #1a5f7a;
+  --info-fondo: #e6f2f7;
+
+  /* --- Tipografia --- */
+  --fuente: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --fuente-mono: 'Consolas', 'Courier New', monospace;
+
+  --texto-xs: 0.75rem;
+  --texto-sm: 0.8125rem;
+  --texto-base: 0.9375rem;
+  --texto-md: 1rem;
+  --texto-lg: 1.125rem;
+  --texto-xl: 1.375rem;
+  --texto-2xl: 1.75rem;
+  --texto-3xl: 2.125rem;
+
+  /* --- Espaciado (escala de 4 px) --- */
+  --esp-1: 0.25rem;
+  --esp-2: 0.5rem;
+  --esp-3: 0.75rem;
+  --esp-4: 1rem;
+  --esp-5: 1.25rem;
+  --esp-6: 1.5rem;
+  --esp-8: 2rem;
+  --esp-10: 2.5rem;
+  --esp-12: 3rem;
+
+  /* --- Radios --- */
+  --radio-sm: 4px;
+  --radio: 8px;
+  --radio-lg: 12px;
+  --radio-full: 999px;
+
+  /* --- Sombras --- */
+  --sombra-sm: 0 1px 2px rgba(43, 43, 43, 0.08);
+  --sombra: 0 2px 8px rgba(43, 43, 43, 0.1);
+  --sombra-lg: 0 8px 24px rgba(43, 43, 43, 0.14);
+  --sombra-terracota: 0 4px 12px rgba(200, 90, 50, 0.28);
+
+  /* --- Transiciones --- */
+  --transicion: 160ms ease-in-out;
+
+  /* --- Layout --- */
+  --ancho-maximo: 1320px;
+  --alto-barra: 60px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

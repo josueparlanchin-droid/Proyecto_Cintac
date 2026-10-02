@@ -1,0 +1,20 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# Base de datos local y archivos subidos
+backend/data/*.db
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,25 @@
+{
+  "name": "cotizador-comex-cintac",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cotizador Logistico de Importaciones Comex - Cintac S.A. (MVP academico INACAP)",
+  "scripts": {
+    "dev": "concurrently -n \"API,WEB\" -c \"yellow,cyan\" \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "seed": "npm run seed --prefix backend",
+    "reset": "npm run reset --prefix backend",
+    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "start": "npm run start --prefix backend",
+    "verificar": "npm run verificar:web && npm run verificar:api",
+    "verificar:api": "npm run verificar --prefix backend",
+    "verificar:web": "npm run verificar --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

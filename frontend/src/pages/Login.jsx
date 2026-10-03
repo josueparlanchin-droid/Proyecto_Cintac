@@ -13,10 +13,15 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Alerta, Campo, Cargador } from '../components/Comunes';
 
-/** Usuarios de demostracion association a cada rol. */
+/**
+ * Usuarios de demostracion asociados a cada rol.
+ *
+ * No se imprimen en ningun lado: solo se usan para completar los campos al
+ * elegir un perfil, de modo que las cuentas no queden escritas en pantalla.
+ */
 const USUARIOS_DEMO = {
-  ADMIN_COMEX: { email: 'jefe@cintac.cl', password: 'Jefatura2026', nombre: 'Carla Mendoza', cargo: 'Jefatura Comex' },
-  ANALISTA: { email: 'analista@cintac.cl', password: 'Analista2026', nombre: 'Diego Fuentes', cargo: 'Analista Comex' },
+  ADMIN_COMEX: { email: 'jefe@cintac.cl', password: 'Jefatura2026' },
+  ANALISTA: { email: 'analista@cintac.cl', password: 'Analista2026' },
 };
 
 const OPCIONES_ROL = [
@@ -38,8 +43,11 @@ export default function Login() {
   const ubicacion = useLocation();
 
   const [rol, setRol] = useState('ADMIN_COMEX');
-  const [email, setEmail] = useState(USUARIOS_DEMO.ADMIN_COMEX.email);
-  const [password, setPassword] = useState(USUARIOS_DEMO.ADMIN_COMEX.password);
+  // Los campos arrancan vacios: el correo y la contrasena no deben quedar
+  // escritos en pantalla. El selector de perfil de arriba los completa al
+  // hacer clic en el rol correspondiente.
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -150,27 +158,6 @@ export default function Login() {
               {enviando ? <span className="boton__spinner" /> : 'Iniciar sesion'}
             </button>
           </form>
-
-          <div className="acceso__demo">
-            <p className="acceso__demo-titulo">Cuentas de demostracion - clic para cargar</p>
-
-            {Object.entries(USUARIOS_DEMO).map(([clave, usuario]) => (
-              <button
-                key={clave}
-                type="button"
-                className="acceso__demo-fila"
-                onClick={() => cambiarRol(clave)}
-              >
-                <span>
-                  <strong style={{ display: 'block', fontSize: 'var(--texto-sm)' }}>{usuario.cargo}</strong>
-                  <span className="acceso__demo-cred">
-                    {usuario.email} / {usuario.password}
-                  </span>
-                </span>
-                <span aria-hidden="true" style={{ color: 'var(--terracota)' }}>→</span>
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>

@@ -9,7 +9,7 @@
  * haga falta sin duplicar informacion.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { Alerta, Cargador, Insignia } from '../components/Comunes';
 import { formatearUSD, formatearEntero, claseRegion, REGIONES } from '../utils/formato';
@@ -18,8 +18,29 @@ export default function Tarifas() {
   const entradaArchivo = useRef(null);
 
   const [tarifas, setTarifas] = useState([]);
-  const [porRegion, setPorRegion] = useState({});
   const [cargando, setCargando] = useState(true);
+
+  /**
+   * Filas agrupadas por region de origen.
+   *
+   * El agrupamiento se arma aqui, y no se toma de `respuesta.porRegion`, porque
+   * ese campo es un CONTAJE por region ({ CHINA: 5, EUROPA: 3, ... }), tal como
+   * lo construye el controlador. Leerlo como si fueran arreglos rompia la tabla
+   * entera: al llegar los datos la pantalla se quedaba en blanco, porque React
+   * desmonta el arbol cuando una funcion falla durante el render.
+   */
+  const grupos = useMemo(() => {
+    const porRegion = {};
+    for (const region of Object.keys(REGIONES)) porRegion[region] = [];
+
+    for (const tarifa of tarifas) {
+      // `??=` agrupa tambien las regiones que el backend no contempla.
+      (porRegion[tarifa.origen_region] ??= []).push(tarifa);
+    }
+
+    // Se descartan los grupos vacios para no pintar encabezados sin filas.
+    return Object.entries(porRegion).filter(([, lista]) => lista.length > 0);
+  }, [tarifas]);
 
   const [subiendo, setSubiendo] = useState(false);
   const [resultado, setResultado] = useState(null);
@@ -31,7 +52,6 @@ export default function Tarifas() {
     try {
       const respuesta = await api.tarifas();
       setTarifas(respuesta.datos);
-      setPorRegion(respuesta.porRegion);
     } catch (fallo) {
       setError({ mensaje: fallo.message, detalle: fallo.detalle });
     } finally {
@@ -56,7 +76,9 @@ export default function Tarifas() {
 
     try {
       const respuesta = await api.subirTarifas(archivo);
-      setResultado(respuesta);
+      // La API responde el sobre { exito, mensaje, datos }; el resumen de la
+      // importacion vive en `datos`, no en la raiz.
+      setResultado(respuesta.datos ?? respuesta);
       cargar();
     } catch (fallo) {
       setError({ mensaje: fallo.message, detalle: fallo.detalle });
@@ -99,7 +121,7 @@ export default function Tarifas() {
             <li>Rutas nuevas: {resultado.insertadas}</li>
             <li>Rutas actualizadas: {resultado.actualizadas}</li>
             <li>Filas omitidas: {resultado.omitidas}</li>
-            <li>Total de rutas vigentes: {formatearEntero(resultado.totalRutasVigentes)}</li>
+            <li>Total de rutas vigentes: {formatearEntero(tarifas.length)}</li>
           </ul>
 
           {resultado.errores.length > 0 && (
@@ -208,9 +230,9 @@ Miami,Valparaiso,40HC,1450,9,25`}
                 </thead>
 
                 <tbody>
-                  {Object.entries(porRegion).flatMap(([region, lista]) =>
-                    lista.map((t) => (
-                      <tr key={t.id}>
+                  {grupos.flatMap(([region, lista]) =>
+                    lista.map((t, indice) => (
+                      <tr key={`${region}-${t.id ?? indice}`}>
                         <td>
                           <Insignia variante={claseRegion(t.origen_region).replace('insignia--', '')}>
                             {t.origen_codigo}

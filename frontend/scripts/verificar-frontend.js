@@ -263,7 +263,30 @@ async function main() {
 
     const textoLogin = await evaluar(`document.body.innerText`);
     comprobar('Se muestra el modulo de acceso a la aplicacion', /CINTAC/i.test(textoLogin ?? ''));
-    comprobar('Se ofrecen las dos cuentas de demostracion', /Jefatura/i.test(textoLogin ?? '') && /Analista/i.test(textoLogin ?? ''));
+    // Los dos perfiles deben seguir siendo seleccionables, pero ni el correo
+    // ni la contrasena pueden quedar escritos en pantalla.
+    comprobar(
+      'Se ofrecen los dos perfiles de acceso',
+      /Jefatura/i.test(textoLogin ?? '') && /Analista/i.test(textoLogin ?? ''),
+    );
+
+    const credencialesVisibles = ['jefe@cintac.cl', 'Jefatura2026', 'analista@cintac.cl', 'Analista2026'].filter(
+      (secreto) => (textoLogin ?? '').includes(secreto),
+    );
+    comprobar(
+      'La pantalla de acceso no imprime correo ni contrasena',
+      credencialesVisibles.length === 0,
+      credencialesVisibles.length > 0 ? `expuestos: ${credencialesVisibles.join(', ')}` : '',
+    );
+
+    const camposVacios = await evaluar(`
+      (() => {
+        const correo = document.getElementById('email')?.value ?? 'NO_EXISTE';
+        const clave = document.getElementById('password')?.value ?? 'NO_EXISTE';
+        return correo === '' && clave === '';
+      })()
+    `);
+    comprobar('Los campos de correo y contrasena parten vacios', camposVacios === true);
 
     // ==================================================================
     console.log('\n2. INICIO DE SESION (Jefatura Comex)');
@@ -304,7 +327,48 @@ async function main() {
     comprobar('El enlace Tarifas es visible para Jefatura', /Tarifas/.test(textoTrasLogin ?? ''));
 
     // ==================================================================
-    console.log('\n3. CONVERSION kg -> tn EN VIVO');
+    console.log('\n3. PANTALLA DE TARIFAS (Jefatura Comex)');
+    // ==================================================================
+
+    /**
+     * Estas comprobaciones existen porque las anteriores no llegaban a abrir
+     * esta pantalla: verificaban que el enlace estuviera visible y que el
+     * Analista fuera expulsado, pero nadie renderizaba /tarifas como Jefatura.
+     * Por eso una excepcion al montar la tabla dejo la pagina en blanco
+     * durante dos revisiones seguidas sin que la suite lo notara.
+     *
+     * Se comprueba que el arbol de React siga vivo ademas del texto, porque
+     * una pantalla en blanco y una pantalla vacia dan el mismo resultado si
+     * solo se mira el contenido.
+     */
+    await navegar(`${FRONTEND}/tarifas`, 3000);
+
+    const arbolVivo = await evaluar(`document.getElementById('root').children.length > 0`);
+    comprobar('La pantalla de Tarifas no se queda en blanco', arbolVivo === true);
+
+    const hayTabla = await evaluar(`document.querySelector('.tabla') !== null`);
+    comprobar('Se dibuja la tabla de rutas tarifadas', hayTabla === true);
+
+    const filasTarifas = await evaluar(`document.querySelectorAll('.tabla tbody tr').length`);
+    comprobar('La tabla de tarifas trae filas', Number(filasTarifas) > 0, `filas=${filasTarifas}`);
+
+    const textoTarifas = (await evaluar(`document.body.innerText`)) ?? '';
+    comprobar(
+      'La tabla muestra los encabezados y los datos de la ruta',
+      // `innerText` aplica `text-transform` de la hoja de estilos, asi que los
+      // rotulos pueden llegar en mayuscula: la comparacion va sin distinguir.
+      /origen/i.test(textoTarifas) && /destino/i.test(textoTarifas) && /usd/i.test(textoTarifas),
+    );
+
+    const hayCargador = await evaluar(`document.querySelector('.cargador') !== null`);
+    comprobar('La tabla de tarifas deja de mostrar el indicador de carga', hayCargador === false);
+
+    // Se vuelve al cotizador: las secciones siguientes operan sobre esa
+    // pantalla, que es adonde redirige el login.
+    await navegar(`${FRONTEND}/cotizador`);
+
+    // ==================================================================
+    console.log('\n4. CONVERSION kg -> tn EN VIVO');
     // ==================================================================
 
     const conversionInicial = await llenar([['peso', '50000']]);
@@ -320,7 +384,7 @@ async function main() {
     void conversionInicial;
 
     // ==================================================================
-    console.log('\n4. CALCULO Y PANEL DE RESULTADOS');
+    console.log('\n5. CALCULO Y PANEL DE RESULTADOS');
     // ==================================================================
 
     // El calculo real lo hace el backend: se pulsa "Calcular cotizacion".
@@ -395,7 +459,7 @@ async function main() {
     comprobar('Se puede desplegar la base de calculo aplicada', hayFormula === true);
 
     // ==================================================================
-    console.log('\n5. HISTORIAL Y AISLAMIENTO POR ROL');
+    console.log('\n6. HISTORIAL Y AISLAMIENTO POR ROL');
     // ==================================================================
 
     await evaluar(`
@@ -413,7 +477,7 @@ async function main() {
     comprobar('Las metricas agregadas se muestran', historial.includes('facturacion simulada'));
 
     // ==================================================================
-    console.log('\n6. SESION DEL ANALISTA (sin permisos de administracion)');
+    console.log('\n7. SESION DEL ANALISTA (sin permisos de administracion)');
     // ==================================================================
 
     await evaluar(`window.localStorage.removeItem('cintac_comex_token')`);
@@ -450,7 +514,7 @@ async function main() {
     );
 
     // ==================================================================
-    console.log('\n7. PERSISTENCIA DE SESION AL RECARGAR');
+    console.log('\n8. PERSISTENCIA DE SESION AL RECARGAR');
     // ==================================================================
 
     await navegar(`${FRONTEND}/historial`, 2500);
@@ -458,7 +522,7 @@ async function main() {
     comprobar('Recargar no expulsa al usuario de la sesion', rutaTrasRecarga === '/historial', `ruta="${rutaTrasRecarga}"`);
 
     // ==================================================================
-    console.log('\n8. ERRORES DE CONSOLA');
+    console.log('\n9. ERRORES DE CONSOLA');
     // ==================================================================
     comprobar(
       'La aplicacion no lanzo excepciones durante la prueba',

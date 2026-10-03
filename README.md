@@ -300,7 +300,7 @@ Variables de entorno:
 | `DATABASE_URL` | La cadena `-pooler` de Neon, con `?sslmode=verify-full` |
 | `JWT_SECRET` | Una propia, generada con `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
 | `NODE_ENV` | `production` |
-| `CORS_ORIGIN` | El dominio de Vercel, por ejemplo `https://cintac.vercel.app` |
+| `CORS_ORIGIN` | Los dominios de Vercel separados por coma, por ejemplo `https://cintac.vercel.app,https://cintac-abc123-usuario.vercel.app` |
 | `PORT` | Lo asigna Render; no lo fijes |
 
 El proceso se detiene al arrancar si falta `DATABASE_URL` o si `JWT_SECRET` sigue
@@ -327,12 +327,52 @@ Variable de entorno:
 | --- | --- |
 | `VITE_API_URL` | `https://tu-backend.onrender.com/api/v1` |
 
-> **Este es el paso pendiente en el frontend.** Hoy `frontend/src/api/client.js`
-> usa la ruta relativa `/api/v1`, que en desarrollo la resuelve el proxy de
-> Vite. En producción **no hay proxy**, así que hay que definir `VITE_API_URL`
-> con la URL pública de Render; Vite la incrusta en el bundle al compilar.
-> Se dejó el código intacto a propósito, porque cambiar el cliente HTTP no era
-> parte de la migración de base de datos.
+La variable es obligatoria, no opcional: `frontend/src/api/client.js` resuelve la
+URL base desde `VITE_API_URL` y cae en `/api/v1` solo si no está definida.
+
+```js
+const BASE_URL = (import.meta.env.VITE_API_URL ?? '/api/v1').replace(/\/+$/, '');
+```
+
+En desarrollo esa ruta relativa la resuelve el proxy de Vite contra
+`localhost:4010`. En producción **no hay proxy**, así que `/api/v1` consultaría al
+propio dominio de Vercel, que solo sirve archivos estáticos: respondería con el
+`index.html` de la SPA y el login fallaría al leer ese HTML como JSON. Vite
+incrusta el valor en el bundle al compilar, por eso hay que definirlo en el
+panel de Vercel para **Production y Preview** antes de cada despliegue.
+
+Dos síntomas sirven para diagnosticar:
+
+| Síntoma | Causa |
+| --- | --- |
+| Login responde `404` | `VITE_API_URL` sin definir, o mal definida |
+| Login responde `200` con `text/html` | La petición cayó en Vercel, no en la API |
+
+Para comprobar el valor real que quedó incrustado, tras compilar:
+
+```bash
+cd frontend
+VITE_API_URL=https://tu-backend.onrender.com/api/v1 npm run build
+grep -ro "onrender.com" dist/assets | head
+```
+
+### Rutas internas de la SPA
+
+La app usa rutas del navegador (`/login`, `/cotizaciones`, ...), pero un build de
+Vite genera archivos estáticos y no existe un archivo llamado `login`. Por eso
+`frontend/vercel.json` declara una reescritura de respaldo:
+
+```json
+{ "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }] }
+```
+
+Vercel la aplica **solo cuando ninguna ruta coincide con un archivo del build**,
+de modo que los assets siguen serviéndose normalmente. La exclusión de `api/` es
+deliberada: deja que `/api/*` siga devolviendo `404` en lugar de un `200` con
+HTML, que es mucho más difícil de interpretar al diagnosticar.
+
+Sin este archivo, entrar directo a `/login` o refrescar en una ruta interna
+devuelve la página `404` de Vercel.
 
 Cuando cambies la URL de Vercel, vuelve a guardarla en `CORS_ORIGIN` del backend:
 CORS usa `credentials: true`, por lo que no admite `*`.

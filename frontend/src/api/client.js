@@ -12,7 +12,22 @@
  *     login sin que cada pantalla deba detectarlo.
  */
 
-const BASE_URL = '/api/v1';
+/**
+ * URL base de la API.
+ *
+ * En desarrollo no se define VITE_API_URL y el navegador llama a /api/v1
+ * sobre el mismo origen, que el proxy de Vite reenvia a localhost:4010.
+ *
+ * En produccion NO existe ese proxy: Vercel solo sirve los archivos estaticos
+ * del build, asi que /api/v1 devolveria el index.html de la SPA (HTTP 200 con
+ * content-type text/html) y el fallo apareceria como un error de parseo de
+ * JSON, muy lejos de su causa real. Por eso el despliegue define
+ * VITE_API_URL apuntando a la URL publica del backend.
+ *
+ * El `replace` evita que un valor con barra final genere rutas dobles al
+ * concatenar con un ruta que ya empieza por '/'.
+ */
+const BASE_URL = (import.meta.env.VITE_API_URL ?? '/api/v1').replace(/\/+$/, '');
 
 /** Clave del token en localStorage. */
 export const CLAVE_TOKEN = 'cintac_comex_token';
@@ -78,10 +93,11 @@ async function peticion(ruta, { metodo = 'GET', cuerpo = null, formData = null, 
       body: formData ?? (cuerpo !== null ? JSON.stringify(cuerpo) : undefined),
     });
   } catch {
-    throw new ErrorApi(
-      'No se pudo conectar con el servidor. Verifique que el backend este ejecutandose en el puerto 4010.',
-      { codigo: 'SIN_CONEXION' },
-    );
+    // Se nombra la URL efectiva: decir "puerto 4010" seria falso en
+    // produccion, donde el backend vive en otro dominio.
+    throw new ErrorApi(`No se pudo conectar con la API en ${BASE_URL}.`, {
+      codigo: 'SIN_CONEXION',
+    });
   }
 
   // 204: sin cuerpo que parsear.
@@ -93,10 +109,16 @@ async function peticion(ruta, { metodo = 'GET', cuerpo = null, formData = null, 
   try {
     datos = texto ? JSON.parse(texto) : {};
   } catch {
-    throw new ErrorApi('El servidor devolvio una respuesta no valida.', {
-      status: respuesta.status,
-      codigo: 'RESPUESTA_INVALIDA',
-    });
+    // Casi siempre significa que la respuesta era HTML: la peticion cayo en
+    // un servidor que no es la API. Se informan status y content-type porque
+    // distinguen de un vistazo entre "no existe ese endpoint" (404) y
+    // "respondio otra aplicacion" (200 con text/html), que es el sintoma
+    // clasico de VITE_API_URL sin definir en un despliegue.
+    const tipo = respuesta.headers.get('content-type') ?? 'tipo desconocido';
+    throw new ErrorApi(
+      `La API en ${BASE_URL} no devolvio JSON (HTTP ${respuesta.status}, ${tipo}).`,
+      { status: respuesta.status, codigo: 'RESPUESTA_INVALIDA' },
+    );
   }
 
   if (!respuesta.ok) {

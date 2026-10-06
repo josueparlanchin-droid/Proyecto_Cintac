@@ -11,12 +11,18 @@ import { ROLES } from '../utils/formato';
 
 /**
  * Las secciones visibles dependen del rol:
- * el Analista no ve "Tarifas" porque su accion esta reservada a Jefatura.
+ * el Analista no ve "Tarifas" ni "Usuarios" porque ambas acciones estan
+ * reservadas a Jefatura.
+ *
+ * Ocultar el enlace es solo Presentacion. La ruta sigue protegida por
+ * `RutaPorRol` en App.jsx y por `soloAdmin` en el backend: si alguien escribe
+ * /usuarios a mano siendo Analista, la aplicacion lo devuelve al cotizador.
  */
 const ENLACES = [
   { ruta: '/cotizador', etiqueta: 'Cotizador' },
   { ruta: '/historial', etiqueta: 'Historial' },
   { ruta: '/tarifas', etiqueta: 'Tarifas', soloAdmin: true },
+  { ruta: '/usuarios', etiqueta: 'Usuarios', soloAdmin: true },
 ];
 
 export default function Layout() {

@@ -41,6 +41,14 @@ const esquemaEnv = z.object({
   AUTH_RATE_LIMIT_WINDOW_MIN: z.coerce.number().int().positive().default(15),
 
   UPLOAD_MAX_MB: z.coerce.number().positive().default(5),
+
+  // Codigo de invitacion del auto-registro. Sin valor NO hay registro: el
+  // endpoint responde 403. Borrar la variable es, por lo tanto, la forma
+  // de cerrar el registro en produccion sin tocar una linea de codigo.
+  //
+  // No lleva valor por defecto a proposito: un codigo de ejemplo en el
+  // repositorio seria un codigo real y publico en cuanto se despliega.
+  REGISTRATION_CODE: z.string().min(6).optional(),
 });
 
 const parseado = esquemaEnv.safeParse(process.env);
@@ -82,6 +90,8 @@ export const env = Object.freeze({
   isProduction: esProduccion,
   /** Lista de origenes permitidos, separada por comas. */
   corsOrigins: valores.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean),
+  /** El auto-registro solo existe si hay codigo de invitacion definido. */
+  registroHabilitado: Boolean(valores.REGISTRATION_CODE),
 });
 
 export default env;

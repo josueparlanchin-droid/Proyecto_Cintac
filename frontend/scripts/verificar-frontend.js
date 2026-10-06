@@ -263,11 +263,20 @@ async function main() {
 
     const textoLogin = await evaluar(`document.body.innerText`);
     comprobar('Se muestra el modulo de acceso a la aplicacion', /CINTAC/i.test(textoLogin ?? ''));
-    // Los dos perfiles deben seguir siendo seleccionables, pero ni el correo
-    // ni la contrasena pueden quedar escritos en pantalla.
+
+    // El selector de perfil se elimino: el rol lo determina la cuenta, no la
+    // pantalla. Ademas, un selector que rellena las credenciales de los
+    // usuarios de demostracion deja las claves de la aplicacion escritas en
+    // pantalla, que es exactamente lo que la siguiente comprobacion prohibe.
+    //
+    // La consulta al DOM va dentro de `evaluar`: este script corre en Node y no
+    // tiene `document`. Escribirlo aqui lanzaria ReferenceError.
+    const haySelector = await evaluar(`document.querySelector('.selector-rol') !== null`);
+    comprobar('El acceso ya NO ofrece tarjetas de perfil por rol', haySelector === false);
     comprobar(
-      'Se ofrecen los dos perfiles de acceso',
-      /Jefatura/i.test(textoLogin ?? '') && /Analista/i.test(textoLogin ?? ''),
+      'El acceso no ofrece perfiles de rol seleccionables',
+      !/Jefatura Comex/i.test(textoLogin ?? '') && !/Analista Comex/i.test(textoLogin ?? ''),
+      `texto: ${JSON.stringify((textoLogin ?? '').slice(0, 160))}`,
     );
 
     const credencialesVisibles = ['jefe@cintac.cl', 'Jefatura2026', 'analista@cintac.cl', 'Analista2026'].filter(
@@ -277,6 +286,19 @@ async function main() {
       'La pantalla de acceso no imprime correo ni contrasena',
       credencialesVisibles.length === 0,
       credencialesVisibles.length > 0 ? `expuestos: ${credencialesVisibles.join(', ')}` : '',
+    );
+
+    const enlaceRegistro = await evaluar(`
+      (() => {
+        const enlace = [...document.querySelectorAll('a')]
+          .find((a) => a.getAttribute('href') === '/registro');
+        return enlace ? enlace.textContent.trim() : null;
+      })()
+    `);
+    comprobar(
+      'El acceso ofrece el enlace al registro con codigo de invitacion',
+      Boolean(enlaceRegistro),
+      `enlace: ${enlaceRegistro}`,
     );
 
     const camposVacios = await evaluar(`
@@ -325,9 +347,61 @@ async function main() {
     comprobar('La barra superior muestra al usuario autenticado', /Carla Mendoza/.test(textoTrasLogin ?? ''));
     comprobar('La barra superior indica el rol', /Jefatura Comex/.test(textoTrasLogin ?? ''));
     comprobar('El enlace Tarifas es visible para Jefatura', /Tarifas/.test(textoTrasLogin ?? ''));
+    comprobar('El enlace Usuarios es visible para Jefatura', /Usuarios/.test(textoTrasLogin ?? ''));
 
     // ==================================================================
-    console.log('\n3. PANTALLA DE TARIFAS (Jefatura Comex)');
+    console.log('\n3. PANTALLA DE USUARIOS (Jefatura Comex)');
+    // ==================================================================
+
+    await navegar(`${FRONTEND}/usuarios`, 3000);
+
+    const arbolUsuarios = await evaluar(`document.getElementById('root').children.length > 0`);
+    comprobar('La pantalla de Usuarios no se queda en blanco', arbolUsuarios === true);
+
+    const rutaUsuarios = await evaluar(`window.location.pathname`);
+    comprobar('Jefatura accede a /usuarios', rutaUsuarios === '/usuarios', `ruta="${rutaUsuarios}"`);
+
+    const hayTablaUsuarios = await evaluar(`document.querySelector('.tabla--usuarios') !== null`);
+    comprobar('Se dibuja la tabla de cuentas', hayTablaUsuarios === true);
+
+    const filasUsuarios = await evaluar(`document.querySelectorAll('.tabla--usuarios tbody tr').length`);
+    comprobar('La tabla de cuentas trae filas', Number(filasUsuarios) > 0, `filas=${filasUsuarios}`);
+
+    const hayBitacora = await evaluar(`document.querySelector('.tabla--bitacora') !== null`);
+    comprobar('Se dibuja la bitacora de accesos', hayBitacora === true);
+
+    // La propia cuenta no debe poder modificarse. El boton se deshabilita en
+    // vez de desaparecer, asi que se busca el de la fila propia y se mira su
+    // atributo `disabled`.
+    const propiaDeshabilitada = await evaluar(`
+      (() => {
+        const filas = [...document.querySelectorAll('.tabla--usuarios tbody tr')];
+        const propia = filas.find((f) => f.innerText.includes('(usted)'));
+        if (!propia) return 'sin fila propia';
+        const botones = [...propia.querySelectorAll('.acciones-fila button')];
+        return botones.length > 0 && botones.every((b) => b.disabled);
+      })()
+    `);
+    comprobar(
+      'La cuenta propia no puede modificarse a si misma',
+      propiaDeshabilitada === true,
+      `resultado=${propiaDeshabilitada}`,
+    );
+
+    const accionesPresentes = await evaluar(`
+      (() => {
+        const textos = [...document.querySelectorAll('.tabla--usuarios .acciones-fila button')]
+          .map((b) => b.textContent.trim());
+        return [...new Set(textos)].sort();
+      })()
+    `);
+    const hayPromover = (accionesPresentes ?? []).some((t) => /Promover|Degradar/.test(t));
+    const hayEstado = (accionesPresentes ?? []).some((t) => /Desactivar|Reactivar/.test(t));
+    comprobar('Hay control para cambiar el rol', hayPromover, `acciones=${JSON.stringify(accionesPresentes)}`);
+    comprobar('Hay control para desactivar y reactivar', hayEstado, `acciones=${JSON.stringify(accionesPresentes)}`);
+
+    // ==================================================================
+    console.log('\n4. PANTALLA DE TARIFAS (Jefatura Comex)');
     // ==================================================================
 
     /**
@@ -368,7 +442,7 @@ async function main() {
     await navegar(`${FRONTEND}/cotizador`);
 
     // ==================================================================
-    console.log('\n4. CONVERSION kg -> tn EN VIVO');
+    console.log('\n5. CONVERSION kg -> tn EN VIVO');
     // ==================================================================
 
     const conversionInicial = await llenar([['peso', '50000']]);
@@ -384,7 +458,7 @@ async function main() {
     void conversionInicial;
 
     // ==================================================================
-    console.log('\n5. CALCULO Y PANEL DE RESULTADOS');
+    console.log('\n6. CALCULO Y PANEL DE RESULTADOS');
     // ==================================================================
 
     // El calculo real lo hace el backend: se pulsa "Calcular cotizacion".
@@ -459,7 +533,7 @@ async function main() {
     comprobar('Se puede desplegar la base de calculo aplicada', hayFormula === true);
 
     // ==================================================================
-    console.log('\n6. HISTORIAL Y AISLAMIENTO POR ROL');
+    console.log('\n7. HISTORIAL Y AISLAMIENTO POR ROL');
     // ==================================================================
 
     await evaluar(`
@@ -477,23 +551,20 @@ async function main() {
     comprobar('Las metricas agregadas se muestran', historial.includes('facturacion simulada'));
 
     // ==================================================================
-    console.log('\n7. SESION DEL ANALISTA (sin permisos de administracion)');
+    console.log('\n8. SESION DEL ANALISTA (sin permisos de administracion)');
     // ==================================================================
 
     await evaluar(`window.localStorage.removeItem('cintac_comex_token')`);
     await navegar(`${FRONTEND}/login`);
     await new Promise((r) => setTimeout(r, 1500));
 
-    await evaluar(`
-      (() => {
-        Array.from(document.querySelectorAll('.selector-rol__opcion'))
-          .find(b => b.textContent.includes('Analista Comex'))?.click();
-        return true;
-      })()
-    `);
-
-    // El boton de rol ya completo el correo: solo queda la contrasena.
-    await llenar([['password', 'Analista2026']]);
+    // El acceso ya no tiene selector de perfil: el correo se escribe como
+    // cualquier otro campo. Antes se hacia clic en la tarjeta "Analista Comex"
+    // y el formulario se rellenaba solo.
+    await llenar([
+      ['email', 'analista@cintac.cl'],
+      ['password', 'Analista2026'],
+    ]);
     await evaluar(`document.querySelector('form').requestSubmit(), true`);
 
     await new Promise((r) => setTimeout(r, 3000));
@@ -502,6 +573,7 @@ async function main() {
     comprobar('El Analista accede a la aplicacion', /cotizacion de importacion/i.test(textoAnalista));
     comprobar('El Analista ve su nombre en la barra', /diego fuentes/i.test(textoAnalista));
     comprobar('El enlace Tarifas NO aparece para el Analista', !/tarifas/i.test(textoAnalista));
+    comprobar('El enlace Usuarios NO aparece para el Analista', !/Usuarios/.test(textoAnalista));
 
     await evaluar(`window.location.href = '${FRONTEND}/tarifas'`);
     await new Promise((r) => setTimeout(r, 2500));
@@ -513,16 +585,114 @@ async function main() {
       `ruta="${urlAnalistaTarifas}"`,
     );
 
+    // Escribir /usuarios a mano es el caso interesante: el enlace no existe
+    // para el Analista, asi que la unica forma de probarlo es por URL. La ruta
+    // esta protegida en App.jsx y el endpoint responde 403 en el backend; son
+    // dos capas distintas y ambas se necesitan.
+    await evaluar(`window.location.href = '${FRONTEND}/usuarios'`);
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const urlAnalistaUsuarios = await evaluar(`window.location.pathname`);
+    comprobar(
+      'El Analista es redirigido si intenta abrir /usuarios directamente',
+      urlAnalistaUsuarios === '/cotizador',
+      `ruta="${urlAnalistaUsuarios}"`,
+    );
+
     // ==================================================================
-    console.log('\n8. PERSISTENCIA DE SESION AL RECARGAR');
+    console.log('\n9. PANTALLA DE REGISTRO');
     // ==================================================================
+
+    // Se visita sin sesion y con el codigo deliberadamente incorrecto: lo que
+    // se comprueba es el formulario, el medidor y que la pantalla exista. El
+    // alta efectiva se prueba en la suite de API, que es donde se puede
+    // configurar REGISTRATION_CODE de forma controlada.
+    await evaluar(`window.localStorage.removeItem('cintac_comex_token')`);
+    await navegar(`${FRONTEND}/registro`, 2500);
+
+    const rutaRegistro = await evaluar(`window.location.pathname`);
+    comprobar('La pantalla de registro es accesible sin sesion', rutaRegistro === '/registro', `ruta="${rutaRegistro}"`);
+
+    const arbolRegistro = await evaluar(`document.getElementById('root').children.length > 0`);
+    comprobar('La pantalla de registro no se queda en blanco', arbolRegistro === true);
+
+    const camposRegistro = await evaluar(`
+      ['nombre', 'email-registro', 'codigoInvitacion', 'password-registro', 'passwordRepeticion']
+        .every((id) => document.getElementById(id) !== null)
+    `);
+    comprobar('El formulario tiene los cinco campos', camposRegistro === true);
+
+    // El codigo de invitacion es una credencial: se escribe en un campo de tipo
+    // password, no visible al escribir.
+    const codigoOculto = await evaluar(`
+      (document.getElementById('codigoInvitacion')?.type ?? '') === 'password'
+    `);
+    comprobar('El codigo de invitacion se escribe de forma oculta', codigoOculto === true);
+
+    const medidorPresente = await evaluar(`document.querySelectorAll('.medidor__item').length`);
+    comprobar('Se muestra el medidor de requisitos', Number(medidorPresente) === 5, `items=${medidorPresente}`);
+
+    // Con una contrasena debil, el boton de envio debe seguir deshabilitado:
+    // es el primer filtro, y hace falta que el usuario escriba para comprobar
+    // que el filtro responde.
+    await llenar([['password-registro', 'debil']]);
+    await new Promise((r) => setTimeout(r, 400));
+
+    // "debil" tiene 5 caracteres y solo minusculas, asi que cumple exactamente
+    // UNA regla: la de minuscula. Esperar 0 seria incorrecto, y esperar menos
+    // que 5 es lo que demuestra que el medidor discrimina regla por regla en
+    // vez de marcarlas todas en bloque.
+    const cumplidosConDebil = await evaluar(`document.querySelectorAll('.medidor__item--cumple').length`);
+    comprobar(
+      'El medidor marca solo la regla que la contrasena debil si cumple',
+      Number(cumplidosConDebil) === 1,
+      `cumple=${cumplidosConDebil} (se espera 1: la de minuscula)`,
+    );
+
+    const botonDeshabilitado = await evaluar(`
+      (() => {
+        const boton = [...document.querySelectorAll('button[type="submit"]')][0];
+        return boton ? boton.disabled : 'NO_EXISTE';
+      })()
+    `);
+    comprobar('El boton de alta sigue deshabilitado con contrasena debil', botonDeshabilitado === true, `disabled=${botonDeshabilitado}`);
+
+    // Ahora una contrasena que cumple las cinco reglas: el medidor debe
+    // marcar todas y el boton seguir deshabilitado porque faltan los demas
+    // campos. Asi se comprueba que el medidor responde sin depender del
+    // backend.
+    await llenar([['password-registro', 'Segura#2026'], ['passwordRepeticion', 'Segura#2026']]);
+    await new Promise((r) => setTimeout(r, 400));
+
+    const cumplidosConFuerte = await evaluar(`document.querySelectorAll('.medidor__item--cumple').length`);
+    comprobar('El medidor acepta una contrasena que cumple todo', Number(cumplidosConFuerte) === 5, `cumple=${cumplidosConFuerte}`);
+
+    const textoRegistro = (await evaluar(`document.body.innerText`)) ?? '';
+    comprobar('La pantalla ofrece volver al inicio de sesion', /Iniciar sesion/i.test(textoRegistro));
+
+    // ==================================================================
+    console.log('\n10. PERSISTENCIA DE SESION AL RECARGAR');
+    // ==================================================================
+
+    // La seccion anterior entro a /registro SIN sesion, quitando el token a
+    // proposito. Antes de comprobar la persistencia hay que recuperar una: sin
+    // sesion, /historial redirige a /login y la comprobacion mediria lo
+    // contrario de lo que dice. Se vuelve a entrar como Analista.
+    await evaluar(`window.localStorage.removeItem('cintac_comex_token')`);
+    await navegar(`${FRONTEND}/login`, 1500);
+    await llenar([
+      ['email', 'analista@cintac.cl'],
+      ['password', 'Analista2026'],
+    ]);
+    await evaluar(`document.querySelector('form').requestSubmit(), true`);
+    await new Promise((r) => setTimeout(r, 3000));
 
     await navegar(`${FRONTEND}/historial`, 2500);
     const rutaTrasRecarga = await evaluar(`window.location.pathname`);
     comprobar('Recargar no expulsa al usuario de la sesion', rutaTrasRecarga === '/historial', `ruta="${rutaTrasRecarga}"`);
 
     // ==================================================================
-    console.log('\n9. ERRORES DE CONSOLA');
+    console.log('\n11. ERRORES DE CONSOLA');
     // ==================================================================
     comprobar(
       'La aplicacion no lanzo excepciones durante la prueba',

@@ -62,7 +62,12 @@ npm run dev
 | Jefatura Comex | `jefe@cintac.cl` | `Jefatura2026` | Ve todas las cotizaciones, elimina y carga tarifas |
 | Analista Comex | `analista@cintac.cl` | `Analista2026` | Ve solo sus propias cotizaciones |
 
-Ambas cuentas se pueden elegir con los botones de rol en la pantalla de login.
+El rol lo determina la cuenta, no la pantalla: se escriben el correo y la
+contraseña a mano. Antes había unos botones de rol que los completaban solos, y
+se retiraron porque dejaban las dos claves de demostración escritas en pantalla.
+
+Para una cuenta nueva hace falta **/registro** y el `REGISTRATION_CODE`; ver
+[Cuentas de usuario](#cuentas-de-usuario).
 
 ## Variables de entorno
 
@@ -86,6 +91,7 @@ copy backend\.env.example backend\.env   # Windows
 | `RATE_LIMIT_MAX` | `300` | Peticiones por ventana de 15 min |
 | `AUTH_RATE_LIMIT_MAX` | `20` | Intentos de login fallidos por 15 min |
 | `UPLOAD_MAX_MB` | `5` | Tamaño máximo de la planilla |
+| `REGISTRATION_CODE` | *(sin valor)* | Código de invitación del auto-registro. Sin valor, el registro responde 403 |
 
 ### Conectar la base de datos
 
@@ -142,7 +148,8 @@ en vivo, mientras el usuario escribe.
 │   │   ├── middleware/      autenticación, RBAC, errores, validación, rate limit
 │   │   ├── models/          acceso a datos con SQL parametrizado
 │   │   ├── routes/          definición de endpoints
-│   │   ├── services/        motor de cálculo e importación de tarifas
+│   │   ├── services/        motor de cálculo, importación de tarifas y cuentas
+│   │   ├── controllers/     manejadores HTTP
 │   │   ├── app.js           ensamblado de Express
 │   │   └── server.js        arranque y cierre ordenado
 │   └── scripts/             verificación de API, conexión y reset de la base
@@ -153,7 +160,7 @@ en vivo, mientras el usuario escribe.
 │       ├── api/             cliente HTTP y manejo de sesión
 │       ├── components/      componentes de UI reutilizables
 │       ├── context/         contexto de autenticación
-│       ├── pages/           login, cotizador, historial, tarifas
+│       ├── pages/           login, registro, usuarios, cotizador, historial, tarifas
 │       ├── styles/          tokens de diseño y componentes
 │       └── utils/           PDF y formateo
 └── package.json             scripts de la raíz
@@ -164,7 +171,11 @@ en vivo, mientras el usuario escribe.
 | Método | Ruta | Acceso | Descripción |
 | --- | --- | --- | --- |
 | `POST` | `/auth/login` | Público | Inicia sesión |
+| `POST` | `/auth/registro` | Público | Alta con código de invitación, devuelve token |
 | `GET` | `/auth/me` | Autenticado | Perfil y permisos |
+| `GET` | `/usuarios` | Jefatura | Cuentas con su bitácora de acciones |
+| `PATCH` | `/usuarios/:id/rol` | Jefatura | Promueve o degrada entre Analista y Administrador |
+| `PATCH` | `/usuarios/:id/activo` | Jefatura | Da de baja o reactiva una cuenta |
 | `GET` | `/puertos` | Autenticado | Puertos disponibles |
 | `POST` | `/cotizaciones/calcular` | Autenticado | Simula una cotización |
 | `GET` | `/cotizaciones/historial` | Autenticado | Historial con filtros y paginación |
@@ -176,10 +187,66 @@ en vivo, mientras el usuario escribe.
 | `POST` | `/tarifas/upload` | Jefatura | Carga `.xlsx`/`.xls`/`.csv` |
 | `GET` | `/health` | Público | Estado del servicio |
 
+## Cuentas de usuario
+
+El acceso ya no se elige desde la pantalla: el rol lo determina la cuenta. El
+selector de perfil se retiró por una razón concreta, más allá de la usable: al
+completar solo, dejaba el correo y la contraseña de las cuentas de demostración
+escritos en pantalla.
+
+### Alta con código de invitación
+
+Quien llega a la aplicación sin cuenta usa **/registro** y necesita
+`REGISTRATION_CODE`. Si la variable no está definida, el endpoint responde
+`403`: el registro se cierra quitando la variable, sin tocar código.
+
+- El rol lo fija el modelo dentro del SQL, como `ANALISTA`. Aceptarlo como
+  parámetro sería un agujero, porque el registro es público y cualquiera con el
+  código podría pedir `ADMIN_COMEX`.
+- El código se compara con `crypto.timingSafeEqual` sobre dos SHA-256. Comparar
+  con `===` devuelve `false` en el primer carácter que difiere, así que el
+  tiempo de respuesta revelaría cuántos caracteres correctos lleva el atacante.
+- La contraseña exige 8 a 128 caracteres, mayúscula, minúscula, número y
+  carácter especial, sin repetir tres caracteres seguidos ni contener espacios.
+- Quien se registra entra con sesión de inmediato: la respuesta trae el token.
+
+### Administración de cuentas (Jefatura Comex)
+
+**/usuarios** lista las cuentas y deja promover, degradar, dar de baja y
+reactivar. Cuatro salvaguardas, y las cuatro corren dentro de una transacción
+con bloqueo de fila:
+
+1. Nadie modifica su propia cuenta.
+2. El último administrador activo no se puede degradar ni desactivar.
+3. El registro exige el código de invitación válido.
+4. Toda acción queda anotada en `usuarios_auditoria`.
+
+La segunda se apoya en `SELECT ... FOR UPDATE` sobre los administradores
+activos, con orden de bloqueo fijo (administradores primero, objetivo después).
+Sin eso, dos jefes degradándose entre sí a la vez dejarían el sistema sin nadie
+con permisos, que es justo lo que la salvaguarda promete impedir.
+
+**Dar de baja es una baja lógica**, no un borrado:
+`cotizaciones_log.usuario_id` está declarado con `ON DELETE RESTRICT` y el
+historial es información contable que no se puede perder. La cuenta sale del
+acceso, conserva su trazabilidad y se puede reactivar.
+
+### La baja surte efecto de inmediato
+
+Un JWT es una promesa firmada válida ocho horas. Si el middleware se quedara
+solo con lo que dice el token, un analista degradado seguiría siendo
+`ADMIN_COMEX` durante esas horas y una cuenta desactivada podría seguir
+cotizando. Por eso `requiereAuth` **relee la fila en cada petición
+autenticada**: el token acredita quién es, y `activo` y `rol` se leen del
+servidor. Es el precio de que "desactivar" signifique algo.
+
 ## Seguridad implementada
 
-- Contraseñas con hash bcrypt, nunca en texto plano.
-- JWT verificado en cada ruta protegida, con expiración de 8 h.
+- Contraseñas con hash bcrypt, nunca en texto plano. La columna no aparece en
+  ninguna respuesta: el modelo consulta con una proyección explícita, así que
+  añadir una columna sensible obliga a revisar ese punto.
+- JWT verificado en cada ruta protegida, con expiración de 8 h y con la
+  vigencia de la cuenta comprobada contra la base en cada petición.
 - Control de acceso por rol en el **backend** (ocultar un botón no es
   seguridad: el Analysta recibe 403 aunque llame a la API directamente).
 - Aislamiento del historial: un Analista solo recupera sus propias cotizaciones.
@@ -187,6 +254,8 @@ en vivo, mientras el usuario escribe.
 - Validación de entrada con Zod en los endpoints que reciben datos.
 - Rate limiting con límites distintos para login y para el resto de la API.
 - Límite de tamaño y de filas en la carga de tarifas.
+- El alta responde el mismo error ante correo inexistente y contraseña
+  incorrecta, para no confirmar por diferencia si un correo está registrado.
 
 ## Carga de tarifas
 
@@ -301,7 +370,19 @@ Variables de entorno:
 | `JWT_SECRET` | Una propia, generada con `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
 | `NODE_ENV` | `production` |
 | `CORS_ORIGIN` | Los dominios de Vercel separados por coma, por ejemplo `https://cintac.vercel.app,https://cintac-abc123-usuario.vercel.app` |
+| `REGISTRATION_CODE` | El código de invitación, mínimo 6 caracteres |
 | `PORT` | Lo asigna Render; no lo fijes |
+
+Al guardar la variable, Render reinicia el servicio por su cuenta: no hace falta
+lanzar un despliegue a mano. Y **no hay migración que correr**: `server.js`
+llama a `inicializarEsquema()` antes de escuchar, que ejecuta
+`backend/src/db/schema.sql` entero con `CREATE TABLE IF NOT EXISTS`. La tabla
+`usuarios_auditoria` aparece sola en el primer arranque tras el despliegue.
+
+> `REGISTRATION_CODE` es la única puerta de un endpoint público, así que se
+> comparte por un canal que no sea el repositorio. **Borrarla cierra el
+> registro** sin tocar una línea de código: el sistema falla cerrado, no
+> abierto. Para rotarla, edita la variable.
 
 El proceso se detiene al arrancar si falta `DATABASE_URL` o si `JWT_SECRET` sigue
 siendo el de desarrollo, para que el fallo sea visible en el log del despliegue

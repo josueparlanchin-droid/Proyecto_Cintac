@@ -322,44 +322,204 @@ select.control {
   font-variant-numeric: tabular-nums;
 }
 
-/* Selector de rol (segmentado) */
-.selector-rol {
+/* --- Registro: medidor de contrasena ---------------------------------- */
+/* El medidor es la pieza que evita el error tipico del
+   formulario de alta: escribir una contrasena corta y descubrir las reglas
+   solo cuando el servidor la rechaza. Cada regla se marca por separado
+   para que se vea cual falta, no solo que "algo" falta. */
+.medidor {
+  list-style: none;
+  margin: calc(var(--esp-2) * -1) 0 var(--esp-4);
+  padding: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.medidor__item {
+  display: flex;
+  align-items: center;
   gap: var(--esp-2);
+  font-size: var(--texto-xs);
+  color: var(--gris-medio);
+  transition: color var(--transicion);
 }
 
-.selector-rol__opcion {
-  padding: var(--esp-3);
-  border: 1.5px solid var(--borde-fuerte);
-  border-radius: var(--radio);
-  background: var(--blanco);
-  text-align: center;
-  transition: all var(--transicion);
+.medidor__item--cumple {
+  color: var(--exito);
 }
 
-.selector-rol__opcion:hover {
-  border-color: var(--terracota-claro);
-  background: var(--blanco-hueso);
+.medidor__marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 0.7rem;
+  line-height: 1;
 }
 
-.selector-rol__opcion--activa {
-  border-color: var(--terracota);
-  background: var(--terracota);
+.medidor__item--cumple .medidor__marca {
+  background: var(--exito);
+  border-color: var(--exito);
   color: var(--blanco);
 }
 
-.selector-rol__titulo {
-  font-weight: 700;
-  font-size: var(--texto-sm);
-  display: block;
+/* Input con boton de accion a la derecha (mostrar contrasena). */
+.control-con-boton {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
 }
 
-.selector-rol__detalle {
+.control-con-boton .control {
+  flex: 1;
+}
+
+.boton--texto {
+  padding: var(--esp-2) var(--esp-3);
+  border: none;
+  background: transparent;
+  color: var(--terracota);
+  font-size: var(--texto-sm);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radio-sm);
+}
+
+.boton--texto:hover {
+  background: var(--blanco-hueso);
+}
+
+.boton--texto[aria-pressed='true'] {
+  color: var(--gris-medio);
+}
+
+.registro__intro {
+  font-size: var(--texto-sm);
+  color: var(--gris-medio);
+  margin-bottom: var(--esp-4);
+  line-height: 1.5;
+}
+
+.registro__ayuda {
   font-size: var(--texto-xs);
-  opacity: 0.85;
-  display: block;
-  margin-top: 2px;
+  color: var(--gris-claro);
+  text-align: center;
+  margin-top: var(--esp-2);
+}
+
+.acceso__pie {
+  margin-top: var(--esp-4);
+  padding-top: var(--esp-4);
+  border-top: 1px solid var(--borde);
+  font-size: var(--texto-sm);
+  color: var(--gris-medio);
+  text-align: center;
+}
+
+.acceso__pie a {
+  color: var(--terracota);
+  font-weight: 600;
+}
+
+.acceso__pie a:hover {
+  text-decoration: underline;
+}
+
+/* Caja mas ancha para el formulario de registro, que tiene mas campos que el
+   login y se quedaria cramped en el ancho original. */
+.acceso__caja--ancha {
+  max-width: 30rem;
+}
+
+/* --- Administracion de cuentas ---------------------------------------- */
+.celda-usuario {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.celda-usuario__nombre {
+  font-weight: 600;
+  color: var(--gris-oscuro);
+}
+
+.celda-usuario__propio {
+  font-weight: 400;
+  font-size: var(--texto-xs);
+  color: var(--gris-claro);
+}
+
+.celda-usuario__correo {
+  font-size: var(--texto-xs);
+  color: var(--gris-medio);
+}
+
+.celda-fecha {
+  font-size: var(--texto-xs);
+  color: var(--gris-medio);
+  white-space: nowrap;
+}
+
+.celda-detalle {
+  font-size: var(--texto-xs);
+  color: var(--gris-medio);
+  max-width: 26rem;
+}
+
+.celda-actor {
+  font-size: var(--texto-xs);
+  color: var(--gris-oscuro);
+}
+
+/* El auto-registro no tiene un administrador responsable, asi que se
+   distingue de una accion manual en lugar de dejar la celda vacia. */
+.celda-actor--sistema {
+  color: var(--gris-claro);
+  font-style: italic;
+}
+
+.acciones-fila {
+  display: flex;
+  gap: var(--esp-2);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.boton--pequeno {
+  padding: 0.3rem 0.6rem;
+  font-size: var(--texto-xs);
+  white-space: nowrap;
+}
+
+.tabla--usuarios th,
+.tabla--bitacora th {
+  white-space: nowrap;
+}
+
+.tarjeta__titulo {
+  font-size: var(--texto-base);
+  font-weight: 700;
+  color: var(--gris-oscuro);
+  margin: 0 0 var(--esp-4);
+  padding-bottom: var(--esp-2);
+  border-bottom: 1px solid var(--borde);
+}
+
+.tarjeta__texto {
+  color: var(--gris-medio);
+  font-size: var(--texto-sm);
+  margin: 0;
+}
+
+.modal__nota {
+  font-size: var(--texto-xs);
+  color: var(--gris-claro);
+  margin-top: var(--esp-2);
 }
 
 /* Deslizador de dias de contingencia */

@@ -4,7 +4,8 @@
  * Logica de autenticacion: verificacion de credenciales y emision de JWT.
  *
  * El hash con bcrypt NUNCA se compara ni se devuelve desde aqui; este
- * modulo es el unico lugar del backend que toca la columna `password`.
+ * modulo es el unico lugar del backend que toca la columna `password`, y por
+ * eso `hashPassword` vive aqui y no en el servicio de usuarios.
  */
 
 import bcrypt from 'bcryptjs';
@@ -62,6 +63,14 @@ function cabecerasIntentos(estado) {
 }
 
 /**
+ * Hashea una contrasena con bcrypt.
+ *
+ * Vive aqui, y no en el servicio de usuarios, para que exista UN solo lugar
+ * en todo el backend que importe bcrypt. Si el hash se hiciera en dos
+ * archivos, alguien acabaria usando `SALT_ROUNDS` distinto en uno de los dos,
+ * y las cuentas creadas por un camino serian mas lentas de verificar que las
+ * del otro.
+ *
  * @param {string} passwordPlano
  * @returns {Promise<string>} hash bcrypt.
  */

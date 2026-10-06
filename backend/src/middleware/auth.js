@@ -5,15 +5,33 @@
  */
 
 import { verificarToken } from '../services/authService.js';
+import { buscarPorId } from '../models/usuarioModel.js';
 import { ApiError } from '../utils/ApiError.js';
 
 /**
  * Exige un JWT valido en el header `Authorization: Bearer <token>`.
- * Verifica la firma y la expiracion, y deja el payload en `req.usuario`.
+ *
+ * Verifica la firma y la expiracion, y ADEMAS relee la cuenta desde la base de
+ * datos. Ese segundo paso no es desconfianza del token: es lo que hace que una
+ * baja o una degradacion surtan efecto de inmediato.
+ *
+ * Un JWT es una promesa firmada, valida hasta ocho horas. Si el middleware se
+ * quedara solo con lo que dice el token:
+ *   - un analista degradado seguiria siendo ADMIN_COMEX durante esas ocho horas;
+ *   - una cuenta desactivada podria seguir cotizando y dando por hecho que la
+ *     de la del sistema lo dejo fuera.
+ * Ninguna de las dos cosas es aceptable en un control de acceso, asi que la
+ * fila manda: el token solo acredita quien es, y `activo` y `rol` se leen del
+ * servidor. Por ese motivo `req.usuario` es la fila, no el payload.
+ *
+ * El costo es una consulta por peticion autenticada, sobre una base ya
+ * agrupada en el pool. Es el precio de que la baja de un usuario signifique
+ * algo, y el enunciado pide explicitamente que no se pueda operar con cuentas
+ * desactivadas.
  *
  * @type {import('express').RequestHandler}
  */
-export function requiereAuth(req, res, next) {
+export async function requiereAuth(req, res, next) {
   const header = req.headers.authorization ?? '';
 
   if (!header.startsWith('Bearer ')) {
@@ -25,13 +43,30 @@ export function requiereAuth(req, res, next) {
     return next(ApiError.noAutorizado('Token de autenticacion vacio.'));
   }
 
+  let payload;
   try {
-    const payload = verificarToken(token);
-    req.usuario = {
-      id: payload.sub,
-      email: payload.email,
-      rol: payload.rol,
-    };
+    payload = verificarToken(token);
+  } catch (error) {
+    return next(error);
+  }
+
+  try {
+    const usuario = await buscarPorId(payload.sub);
+
+    // Cuenta borrada o desactivada: la sesion muere aqui. El codigo es el
+    // mismo para ambos casos a proposito, para no confirmar por diferencia si
+    // un correo dado esta o no registrado.
+    if (!usuario || !usuario.activo) {
+      return next(
+        ApiError.noAutorizado('La sesion ya no es valida. Inicie sesion nuevamente.', {
+          codigo: 'SESION_INVALIDA',
+        }),
+      );
+    }
+
+    // La fila completa, con `rol` de la base y no del token: asi una
+    // degradacion no espera a que caduque la credencial para aplicarse.
+    req.usuario = usuario;
     return next();
   } catch (error) {
     return next(error);

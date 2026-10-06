@@ -82,7 +82,7 @@ export async function health(req, res) {
     datos: {
       servicio: 'Cotizador Logistico de Importaciones Comex',
       empresa: 'Cintac S.A.',
-      version: '1.0.0',
+      version: '1.1.0',
       estado: baseOperativa ? 'operativo' : 'degradado',
       baseDatos: 'postgresql',
       baseOperativa,

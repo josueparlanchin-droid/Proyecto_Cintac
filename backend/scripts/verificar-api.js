@@ -158,6 +158,324 @@ async function main() {
     { statusEsperado: 401 },
   );
 
+  // ---------------- Auto-registro con codigo ----------------
+  // El codigo llega por el entorno del proceso que lanza la suite, nunca por
+  // linea de comandos: asi no queda escrito en el historial del shell.
+  //
+  // Si no esta definido, la seccion se OMITE en lugar de fallar. El registro
+  // puede estar cerrado a proposito (la variable no definida lo deshabilita),
+  // y en ese caso un fallo seria una alarma falsa.
+  console.log('\n3. AUTO-REGISTRO CON CODIGO DE INVITACION');
+
+  const CORREO_ALTA = `verificacion.registro.${Date.now()}@cintac.cl`;
+  const CLAVE_ALTA = 'Analista#2026';
+  const codigoInvitacion = process.env.REGISTRATION_CODE;
+
+  /** Cuenta creada por esta corrida, para el resto de las comprobaciones. */
+  let altaCreada = null;
+
+  if (!codigoInvitacion) {
+    console.log('  [OMITE] REGISTRATION_CODE no esta definido: el registro esta cerrado.');
+  } else {
+    const cuerpoAlta = {
+      nombre: 'Analista de Verificacion',
+      email: CORREO_ALTA,
+      password: CLAVE_ALTA,
+      passwordRepeticion: CLAVE_ALTA,
+      codigoInvitacion,
+    };
+
+    await comprobar(
+      'POST /auth/registro - codigo incorrecto -> 403',
+      pedir('/auth/registro', {
+        metodo: 'POST',
+        cuerpo: { ...cuerpoAlta, codigoInvitacion: 'codigo-que-no-es' },
+      }),
+      (c) => c.error.codigo === 'CODIGO_INVALIDO',
+      { statusEsperado: 403 },
+    );
+
+    await comprobar(
+      'POST /auth/registro - contrasena debil -> 400',
+      pedir('/auth/registro', {
+        metodo: 'POST',
+        cuerpo: { ...cuerpoAlta, password: 'debil', passwordRepeticion: 'debil' },
+      }),
+      (c) => c.error.codigo === 'VALIDACION_FALLIDA',
+      { statusEsperado: 400 },
+    );
+
+    await comprobar(
+      'POST /auth/registro - repeticion distinta -> 400',
+      pedir('/auth/registro', {
+        metodo: 'POST',
+        cuerpo: { ...cuerpoAlta, passwordRepeticion: 'Otra#2026distinta' },
+      }),
+      (c) => c.error.codigo === 'VALIDACION_FALLIDA',
+      { statusEsperado: 400 },
+    );
+
+    // El endpoint es publico, asi que aceptar un rol desde el body seria un
+    // agujero de escalamiento de privilegios. El esquema es estricto, asi que
+    // el campo de mas produce 400 antes de tocar la base de datos.
+    await comprobar(
+      'POST /auth/registro - intento de inyectar el rol -> 400',
+      pedir('/auth/registro', { metodo: 'POST', cuerpo: { ...cuerpoAlta, rol: 'ADMIN_COMEX' } }),
+      (c) => c.error.codigo === 'VALIDACION_FALLIDA',
+      { statusEsperado: 400 },
+    );
+
+    const alta = await comprobar(
+      'POST /auth/registro - alta valida -> 201 con token inmediato',
+      pedir('/auth/registro', { metodo: 'POST', cuerpo: cuerpoAlta }),
+      (c) => c.exito
+        && c.datos.token.length > 50
+        && c.datos.usuario.rol === 'ANALISTA'
+        && !('password' in c.datos.usuario),
+      {
+        statusEsperado: 201,
+        mostrar: (c) => `id=${c.datos.usuario.id}, rol=${c.datos.usuario.rol}`,
+      },
+    );
+
+    if (alta) {
+      altaCreada = { id: alta.datos.usuario.id, email: CORREO_ALTA };
+
+      await comprobar(
+        'POST /auth/registro - el recien registrado ya puede entrar',
+        pedir('/auth/login', { metodo: 'POST', cuerpo: { email: CORREO_ALTA, password: CLAVE_ALTA } }),
+        (c) => c.exito && c.datos.usuario.rol === 'ANALISTA',
+      );
+
+      await comprobar(
+        'POST /auth/registro - correo duplicado -> 409',
+        pedir('/auth/registro', { metodo: 'POST', cuerpo: cuerpoAlta }),
+        (c) => c.error.codigo === 'EMAIL_DUPLICADO',
+        { statusEsperado: 409 },
+      );
+    }
+  }
+
+  // ---------------- Administracion de cuentas ----------------
+  console.log('\n4. ADMINISTRACION DE CUENTAS (solo ADMIN_COMEX)');
+
+  await comprobar(
+    'GET /usuarios - sin token -> 401',
+    pedir('/usuarios'),
+    (c) => !c.exito,
+    { statusEsperado: 401 },
+  );
+
+  await comprobar(
+    'GET /usuarios - con token de Analista -> 403',
+    pedir('/usuarios', { token: tokenAnalista }),
+    (c) => !c.exito,
+    { statusEsperado: 403 },
+  );
+
+  const idAdmin = loginAdmin?.datos.usuario.id;
+
+  const listaUsuarios = await comprobar(
+    'GET /usuarios - como Administrador -> 200',
+    pedir('/usuarios', { token: tokenAdmin }),
+    (c) => c.exito && Array.isArray(c.datos.usuarios) && c.datos.resumen.total > 0,
+    { mostrar: (c) => `${c.datos.resumen.total} cuentas, ${c.datos.resumen.administradores} admin` },
+  );
+
+  // El listado no debe incluir jamas la columna con el hash. Es una comprobacion
+  // sobre datos ya leidos, asi que se cuenta a mano en vez de pasar por
+  // `comprobar`, que espera una peticion HTTP.
+  total += 1;
+  if (/password/i.test(JSON.stringify(listaUsuarios?.datos ?? {}))) {
+    fallos += 1;
+    console.log(' [FALLA] GET /usuarios - la respuesta no incluye la columna password');
+  } else {
+    console.log('  OK    GET /usuarios - la respuesta no incluye la columna password');
+  }
+
+  // ---------------- Promocion, degradacion y baja logica ----------------
+  console.log('\n5. PROMOCION, DEGRADACION Y BAJA LOGICA');
+
+  if (!altaCreada) {
+    console.log('  [OMITE] Sin cuenta de prueba: no hay a quien administrar.');
+  } else {
+    const { id } = altaCreada;
+
+    await comprobar(
+      'PATCH /usuarios/:id/rol - degradarse a si mismo -> 400',
+      pedir(`/usuarios/${idAdmin}/rol`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { rol: 'ANALISTA' } }),
+      (c) => c.error.codigo === 'AUTOMODIFICACION_PROHIBIDA',
+      { statusEsperado: 400 },
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/rol - mismo rol -> 409 sin cambio',
+      pedir(`/usuarios/${id}/rol`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { rol: 'ANALISTA' } }),
+      (c) => c.error.codigo === 'ROL_SIN_CAMBIO',
+      { statusEsperado: 409 },
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/rol - como Analista -> 403',
+      pedir(`/usuarios/${id}/rol`, { metodo: 'PATCH', token: tokenAnalista, cuerpo: { rol: 'ADMIN_COMEX' } }),
+      (c) => !c.exito,
+      { statusEsperado: 403 },
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/rol - id inexistente -> 404',
+      pedir('/usuarios/999999/rol', { metodo: 'PATCH', token: tokenAdmin, cuerpo: { rol: 'ADMIN_COMEX' } }),
+      (c) => c.error.codigo === 'USUARIO_NO_ENCONTRADO',
+      { statusEsperado: 404 },
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/rol - rol invalido -> 400',
+      pedir(`/usuarios/${id}/rol`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { rol: 'SUPERADMIN' } }),
+      (c) => c.error.codigo === 'VALIDACION_FALLIDA',
+      { statusEsperado: 400 },
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/rol - promocion a Administrador -> 200',
+      pedir(`/usuarios/${id}/rol`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { rol: 'ADMIN_COMEX' } }),
+      (c) => c.exito && c.datos.usuario.rol === 'ADMIN_COMEX',
+    );
+
+    // El token se pide con la cuenta ya promovida y todavia activa. Debe morir
+    // en cuanto se desactive, asi que se obtiene ANTES.
+    //
+    // `pedir` devuelve una FUNCION: el script usa esa forma para que la
+    // peticion se ejecute dentro de `comprobar`, que ya sabe manejar la
+    // Response. Aqui se necesita el token suelto, asi que se invoca la funcion
+    // y se lee el JSON a mano.
+    const respuestaSesion = await pedir('/auth/login', {
+      metodo: 'POST',
+      cuerpo: { email: CORREO_ALTA, password: CLAVE_ALTA },
+    })();
+    const cuerpoSesion = await respuestaSesion.json();
+    const tokenAntesDeLaBaja = cuerpoSesion?.datos?.token ?? null;
+
+    await comprobar(
+      'PATCH /usuarios/:id/activo - desactivacion -> 200',
+      pedir(`/usuarios/${id}/activo`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { activo: false } }),
+      (c) => c.exito && c.datos.usuario.activo === false,
+    );
+
+    await comprobar(
+      'POST /auth/login - cuenta desactivada -> 403',
+      pedir('/auth/login', { metodo: 'POST', cuerpo: { email: CORREO_ALTA, password: CLAVE_ALTA } }),
+      (c) => !c.exito,
+      { statusEsperado: 403 },
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/activo - estado sin cambio -> 409',
+      pedir(`/usuarios/${id}/activo`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { activo: false } }),
+      (c) => c.error.codigo === 'ESTADO_SIN_CAMBIO',
+      { statusEsperado: 409 },
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/activo - reactivacion -> 200',
+      pedir(`/usuarios/${id}/activo`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { activo: true } }),
+      (c) => c.exito && c.datos.usuario.activo === true,
+    );
+
+    await comprobar(
+      'POST /auth/login - cuenta reactivada vuelve a entrar',
+      pedir('/auth/login', { metodo: 'POST', cuerpo: { email: CORREO_ALTA, password: CLAVE_ALTA } }),
+      (c) => c.exito,
+    );
+
+    await comprobar(
+      'PATCH /usuarios/:id/rol - degradar a otro administrador -> 200',
+      pedir(`/usuarios/${id}/rol`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { rol: 'ANALISTA' } }),
+      (c) => c.exito && c.datos.usuario.rol === 'ANALISTA',
+    );
+
+    // ---------------- Bitacora ----------------
+    console.log('\n6. BITACORA DE ACCIONES');
+
+    // `pedir` devuelve una funcion; hay que invocarla y leer el JSON a mano.
+    const respuestaTras = await pedir('/usuarios', { token: tokenAdmin })();
+    const cuerpoTras = await respuestaTras.json();
+    const registro = cuerpoTras?.datos?.usuarios?.find((u) => u.id === id);
+    const acciones = (registro?.auditoria ?? []).map((e) => e.accion);
+
+    // Estas cuatro comprueban datos YA leidos del listado, asi que no pasan por
+    // `comprobar`: ese helper espera una peticion HTTP y leeria el cuerpo dos
+    // veces. Se anotan a mano sobre los mismos contadores.
+    const aserciones = [
+      [
+        'la bitacora conserva todas las acciones',
+        ['REGISTRO', 'CAMBIAR_ROL', 'DESACTIVAR', 'ACTIVAR'].every((a) => acciones.includes(a)),
+        acciones.join(', '),
+      ],
+      [
+        'la bitacora guarda el rol anterior y el nuevo',
+        (registro?.auditoria ?? []).some(
+          (e) => e.rol_anterior === 'ADMIN_COMEX' && e.rol_nuevo === 'ANALISTA',
+        ),
+        '',
+      ],
+      [
+        'la bitacora identifica al administrador responsable',
+        (registro?.auditoria ?? []).some((e) => e.administrador_email === USUARIOS.admin.email),
+        '',
+      ],
+      [
+        'el auto-registro se distingue de una accion manual',
+        (registro?.auditoria ?? []).some((e) => e.accion === 'REGISTRO' && !e.administrador_email),
+        '',
+      ],
+    ];
+
+    for (const [descripcion, condicion, detalle] of aserciones) {
+      total += 1;
+      if (condicion) {
+        console.log(`  OK    ${descripcion}`);
+        if (detalle) console.log(`          -> ${detalle}`);
+      } else {
+        fallos += 1;
+        console.log(` [FALLA] ${descripcion}`);
+      }
+    }
+
+    console.log('\n7. LA BAJA SURTE EFECTO INMEDIATO');
+
+    // Al final de la seccion 5 la cuenta quedo ACTIVA y degradada a Analista,
+    // porque esas comprobaciones necesitan esos dos estados. Este token se
+    // emitio con ella activa, asi que la prueba de la baja necesita volver a
+    // desactivarla primero.
+    await pedir(`/usuarios/${id}/activo`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { activo: false } })();
+
+    await comprobar(
+      'GET /cotizaciones/historial - token de cuenta desactivada -> 401',
+      pedir('/cotizaciones/historial', { token: tokenAntesDeLaBaja }),
+      (c) => !c.exito,
+      { statusEsperado: 401 },
+    );
+
+    await comprobar(
+      'GET /usuarios - el token de la baja tampoco lista cuentas',
+      pedir('/usuarios', { token: tokenAntesDeLaBaja }),
+      (c) => !c.exito,
+      { statusEsperado: 401 },
+    );
+
+    await comprobar(
+      'GET /auth/me - el token de la baja tampoco identifica al usuario',
+      pedir('/auth/me', { token: tokenAntesDeLaBaja }),
+      (c) => !c.exito,
+      { statusEsperado: 401 },
+    );
+
+    // Se deja la cuenta activa y como Analista: es el estado en que se creo, y
+    // una cuenta de prueba abandonada a medias no sirve para la proxima corrida.
+    await pedir(`/usuarios/${id}/activo`, { metodo: 'PATCH', token: tokenAdmin, cuerpo: { activo: true } })();
+  }
+
   await comprobar(
     'GET /auth/me con token -> permisos por rol',
     pedir('/auth/me', { token: tokenAdmin }),
@@ -172,7 +490,7 @@ async function main() {
   );
 
   // ---------------- 3. Catalogo de puertos ----------------
-  console.log('\n3. CATALOGO DE PUERTOS');
+  console.log('\n8. CATALOGO DE PUERTOS');
 
   const catalogos = await comprobar(
     'GET /puertos -> origen y destino separados',
@@ -201,7 +519,7 @@ async function main() {
   const RTM = porCodigo.NLRTM;
 
   // ---------------- 4. Motor de calculo ----------------
-  console.log('\n4. MOTOR DE CALCULO (limite de 25 tn por contenedor)');
+  console.log('\n9. MOTOR DE CALCULO (limite de 25 tn por contenedor)');
 
   const casos = [
     { nombre: '24.000 kg = 24 tn -> 1 contenedor', peso: 24_000, cont: 1 },
@@ -284,7 +602,7 @@ async function main() {
   );
 
   // ---------------- 5. Validaciones ----------------
-  console.log('\n5. VALIDACION DE ENTRADA');
+  console.log('\n10. VALIDACION DE ENTRADA');
 
   const validaciones = [
     { nombre: 'peso NEGATIVO', campos: { peso_kg: -500, valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: VAP } },
@@ -332,7 +650,7 @@ async function main() {
   );
 
   // ---------------- 6. Control de acceso por rol ----------------
-  console.log('\n6. AUTORIZACION POR ROL');
+  console.log('\n11. AUTORIZACION POR ROL');
 
   await comprobar(
     'DELETE de cotizacion como ANALISTA -> 403 (prohibido)',
@@ -363,7 +681,7 @@ async function main() {
   );
 
   // ---------------- 7. Historial y aislamiento entre usuarios ----------------
-  console.log('\n7. HISTORIAL Y AISLAMIENTO DE DATOS');
+  console.log('\n12. HISTORIAL Y AISLAMIENTO DE DATOS');
 
   const historialAdmin = await comprobar(
     'GET /cotizaciones/historial paginado (admin ve todo)',
@@ -463,7 +781,7 @@ async function main() {
   );
 
   // ---------------- 8. DELETE por ADMIN ----------------
-  console.log('\n8. ELIMINACION (solo ADMIN_COMEX)');
+  console.log('\n13. ELIMINACION (solo ADMIN_COMEX)');
 
   const creada = await comprobar(
     'POST /cotizaciones/calcular crea un registro descartable',
@@ -498,7 +816,7 @@ async function main() {
   }
 
   // ---------------- 9. Tarifas ----------------
-  console.log('\n9. TARIFAS Y CARGA DE PLANILLAS');
+  console.log('\n14. TARIFAS Y CARGA DE PLANILLAS');
 
   await comprobar(
     'GET /tarifas lista las rutas vigentes',
@@ -576,7 +894,7 @@ async function main() {
   );
 
   // ---------------- 10. Rate limiting ----------------
-  console.log('\n10. RATE LIMITING DEL LOGIN');
+  console.log('\n15. RATE LIMITING DEL LOGIN');
 
   total += 1;
   let saw429 = false;

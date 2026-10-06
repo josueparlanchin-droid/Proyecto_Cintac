@@ -116,3 +116,33 @@ CREATE TABLE IF NOT EXISTS cotizaciones_log (
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_usuario  ON cotizaciones_log (usuario_id);
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_fecha    ON cotizaciones_log (fecha_creacion DESC);
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_origen   ON cotizaciones_log (puerto_origen_id);
+
+-- ------------------------------------------------------------------
+-- usuarios_auditoria: bitacora de las acciones de administracion.
+--   Sin esta tabla, un cambio de rol o una baja son indistinguibles de
+--   una carga directa de base de datos. Es lo que permite reconstruir
+--   "quien dejo a este analista sin acceso y cuando".
+--
+--   Se guarda `administrador_email` ADEMAS del id: si esa cuenta se
+--   elimina o se degrada, el registro historico sigue siendo legible.
+--
+--   ON DELETE CASCADE sobre el objetivo porque el usuario puede ser
+--   borrado en el futuro y no queremos huerfanos. ON DELETE SET NULL
+--   sobre el responsable para no perder trazabilidad cuando el propio
+--   administrador desaparece.
+-- ------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS usuarios_auditoria (
+  id                  SERIAL PRIMARY KEY,
+  usuario_objetivo_id INTEGER      NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  administrador_id    INTEGER      REFERENCES usuarios (id) ON DELETE SET NULL,
+  administrador_email VARCHAR(160),
+  accion              VARCHAR(30)  NOT NULL
+                      CHECK (accion IN ('REGISTRO', 'ACTIVAR', 'DESACTIVAR', 'CAMBIAR_ROL')),
+  rol_anterior        VARCHAR(20)  CHECK (rol_anterior IS NULL OR rol_anterior IN ('ADMIN_COMEX', 'ANALISTA')),
+  rol_nuevo           VARCHAR(20)  CHECK (rol_nuevo    IS NULL OR rol_nuevo    IN ('ADMIN_COMEX', 'ANALISTA')),
+  detalle             TEXT,
+  creado_en           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_auditoria_objetivo ON usuarios_auditoria (usuario_objetivo_id);
+CREATE INDEX IF NOT EXISTS idx_auditoria_fecha    ON usuarios_auditoria (creado_en DESC);

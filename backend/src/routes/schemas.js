@@ -100,3 +100,80 @@ export const esquemaIdCotizacion = z.object({ id: idPositivo });
 export const esquemaConsultaPuertos = z.object({
   region: z.enum(['CHINA', 'EUROPA', 'AMERICA', 'CHILE']).optional(),
 });
+
+// ------------------------------------------------------------------
+// POST /api/v1/auth/registro
+// ------------------------------------------------------------------
+// Aqui esta la diferencia entre el login y el registro: el login acepta
+// cualquier contrasena porque la Definio el administrador, pero una clave
+// que elige el usuario en el momento debe medirse con un estandar minimo.
+//
+// Las cinco reglas salen de una sola expresion regular, para que la lista
+// no pueda quedar medio actualizada. Los mensajes van campo a campo porque
+// el formulario los pinta debajo del input que fallo.
+export const esquemaRegistro = z
+  .object({
+    nombre: z
+      .string({ message: 'El nombre es obligatorio.' })
+      .trim()
+      .min(1, 'El nombre es obligatorio.')
+      .max(160, 'El nombre es demasiado largo.'),
+    email: z
+      .string({ message: 'El correo es obligatorio.' })
+      .trim()
+      .min(1, 'El correo es obligatorio.')
+      .email('El formato del correo no es valido.')
+      .max(160, 'El correo es demasiado largo.'),
+    codigoInvitacion: z
+      .string({ message: 'El codigo de invitacion es obligatorio.' })
+      .trim()
+      .min(1, 'El codigo de invitacion es obligatorio.')
+      .max(120, 'El codigo de invitacion es demasiado largo.'),
+    password: z
+      .string({ message: 'La contrasena es obligatoria.' })
+      .min(8, 'La contrasena debe tener al menos 8 caracteres.')
+      .max(128, 'La contrasena es demasiado larga.')
+      .regex(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])\S+$/,
+        'Debe incluir al menos una minuscula, una mayuscula, un numero y un caracter especial.',
+      ),
+    passwordRepeticion: z
+      .string({ message: 'Debe repetir la contrasena.' })
+      .min(1, 'Debe repetir la contrasena.'),
+  })
+  .strict('Campos no esperados en la solicitud.')
+  // La repeticion se compara como SCHEMA y no en el servicio: es una regla de
+  // forma del dato, no una regla de negocio, asi que su error debe llegar
+  // como 400 de validacion y no como una excepcion de servicio.
+  .refine((datos) => datos.password === datos.passwordRepeticion, {
+    message: 'Las contrasenas no coinciden.',
+    path: ['passwordRepeticion'],
+  });
+
+// ------------------------------------------------------------------
+// PATCH /api/v1/usuarios/:id/rol
+// ------------------------------------------------------------------
+export const esquemaCambioRol = z
+  .object({
+    rol: z.enum(['ADMIN_COMEX', 'ANALISTA'], {
+      message: 'Rol no valido.',
+      errorMap: () => ({ message: 'Rol no valido.' }),
+    }),
+  })
+  .strict('Campos no esperados en la solicitud.');
+
+// ------------------------------------------------------------------
+// PATCH /api/v1/usuarios/:id/activo
+// ------------------------------------------------------------------
+// Se acepta el wrapper `{ activo: true }` y no un booleano suelto en el
+// cuerpo para que la peticion sea explicita y extensible.
+export const esquemaCambioActivo = z
+  .object({
+    activo: z.boolean({ message: 'Debe indicar true para activar o false para desactivar.' }),
+  })
+  .strict('Campos no esperados en la solicitud.');
+
+// ------------------------------------------------------------------
+// Parametros :id de las rutas de usuarios
+// ------------------------------------------------------------------
+export const esquemaIdUsuario = z.object({ id: idPositivo });

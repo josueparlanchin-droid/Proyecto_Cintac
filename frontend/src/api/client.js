@@ -152,6 +152,24 @@ export const api = {
   login: (email, password) =>
     peticion('/auth/login', { metodo: 'POST', cuerpo: { email, password } }),
 
+  /**
+   * POST /auth/registro -> { token, expiraEn, usuario }
+   *
+   * Devuelve token, igual que el login: quien se registra con un codigo
+   * valido entra de inmediato, sin pasar por el formulario otra vez.
+   */
+  registro: (datos) =>
+    peticion('/auth/registro', {
+      metodo: 'POST',
+      cuerpo: {
+        nombre: datos.nombre,
+        email: datos.email,
+        password: datos.password,
+        passwordRepeticion: datos.passwordRepeticion,
+        codigoInvitacion: datos.codigoInvitacion,
+      },
+    }),
+
   /** GET /auth/me */
   perfil: () => peticion('/auth/me'),
 
@@ -193,6 +211,22 @@ export const api = {
     formData.append('archivo', archivo);
     return peticion('/tarifas/upload', { metodo: 'POST', formData });
   },
+
+  // --- Administracion de cuentas (solo ADMIN_COMEX) ---
+  // Se decluran aqui, y no en un segundo cliente, porque la autorizacion ya
+  // la aplica el backend en `soloAdmin`: agregar el metodo no es una puerta
+  // nueva, solo una llamada mas al mismo lugar.
+
+  /** GET /usuarios -> { usuarios, resumen } */
+  usuarios: () => peticion('/usuarios'),
+
+  /** PATCH /usuarios/:id/rol */
+  cambiarRol: (id, rol) =>
+    peticion(`/usuarios/${id}/rol`, { metodo: 'PATCH', cuerpo: { rol } }),
+
+  /** PATCH /usuarios/:id/activo */
+  cambiarActivo: (id, activo) =>
+    peticion(`/usuarios/${id}/activo`, { metodo: 'PATCH', cuerpo: { activo } }),
 };
 
 export default api;

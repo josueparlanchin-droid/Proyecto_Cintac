@@ -11,6 +11,7 @@ import authRoutes from './auth.routes.js';
 import puertosRoutes from './puertos.routes.js';
 import cotizacionesRoutes from './cotizaciones.routes.js';
 import tarifasRoutes from './tarifas.routes.js';
+import usuariosRoutes from './usuarios.routes.js';
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.use(`${V1}/auth`, authRoutes);
 router.use(V1, puertosRoutes);
 router.use(`${V1}/cotizaciones`, cotizacionesRoutes);
 router.use(`${V1}/tarifas`, tarifasRoutes);
+router.use(`${V1}/usuarios`, usuariosRoutes);
 
 /** Documentacion minima de la API en texto plano. */
 router.get(`${V1}`, (req, res) => {
@@ -28,11 +30,16 @@ router.get(`${V1}`, (req, res) => {
     exito: true,
     datos: {
       servicio: 'Cotizador Logistico de Importaciones Comex - Cintac S.A.',
-      version: '1.0.0',
+      version: '1.1.0',
       entorno: env.nodeEnv,
+      registroHabilitado: env.registroHabilitado,
       endpoints: [
         { metodo: 'POST', ruta: '/api/v1/auth/login', descripcion: 'Autenticacion (JWT)' },
+        { metodo: 'POST', ruta: '/api/v1/auth/registro', descripcion: 'Auto-registro de analista (exige codigo de invitacion)' },
         { metodo: 'GET', ruta: '/api/v1/auth/me', descripcion: 'Perfil del usuario autenticado' },
+        { metodo: 'GET', ruta: '/api/v1/usuarios', descripcion: 'Listar cuentas (ADMIN_COMEX)' },
+        { metodo: 'PATCH', ruta: '/api/v1/usuarios/:id/rol', descripcion: 'Cambiar rol (ADMIN_COMEX)' },
+        { metodo: 'PATCH', ruta: '/api/v1/usuarios/:id/activo', descripcion: 'Activar o desactivar (ADMIN_COMEX)' },
         { metodo: 'GET', ruta: '/api/v1/puertos', descripcion: 'Catalogo de puertos' },
         { metodo: 'POST', ruta: '/api/v1/cotizaciones/calcular', descripcion: 'Calcular y registrar cotizacion' },
         { metodo: 'GET', ruta: '/api/v1/cotizaciones/historial', descripcion: 'Historial paginado' },

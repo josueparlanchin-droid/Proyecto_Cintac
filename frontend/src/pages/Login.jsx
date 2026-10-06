@@ -1,51 +1,28 @@
 /**
  * pages/Login.jsx
  * -----------------------------------------------------------------
- * Pantalla de autenticacion con seleccion de rol.
+ * Pantalla de autenticacion.
  *
- * El selector de rol no es decorativo: al elegir "Jefatura Comex" o
- * "Analista Comex" se rellenan las credenciales de ese usuario, lo que
- * hace que la demo de los dos roles en la defensa sea inmediata.
+ * No hay selector de perfil. El correo y la contrasena los escribe cada
+ * persona: un formulario que rellena las credenciales de los usuarios de
+ * demostracion segun el rol que se elige es un formulario que enseña las
+ * claves de la aplicacion a cualquiera que abra la pantalla, y en un sistema
+ * con datos de precios de importacion eso no es aceptable.
+ *
+ * El rol lo determina la cuenta, no la pantalla. Quien tenga permisos de
+ * administracion los encuentra en "Usuarios".
  */
 
 import { useState } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Alerta, Campo, Cargador } from '../components/Comunes';
-
-/**
- * Usuarios de demostracion asociados a cada rol.
- *
- * No se imprimen en ningun lado: solo se usan para completar los campos al
- * elegir un perfil, de modo que las cuentas no queden escritas en pantalla.
- */
-const USUARIOS_DEMO = {
-  ADMIN_COMEX: { email: 'jefe@cintac.cl', password: 'Jefatura2026' },
-  ANALISTA: { email: 'analista@cintac.cl', password: 'Analista2026' },
-};
-
-const OPCIONES_ROL = [
-  {
-    valor: 'ADMIN_COMEX',
-    titulo: 'Jefatura Comex',
-    detalle: 'Control total: puede eliminar cotizaciones y cargar tarifas.',
-  },
-  {
-    valor: 'ANALISTA',
-    titulo: 'Analista Comex',
-    detalle: 'Consulta y genera cotizaciones; sin acceso a eliminacion.',
-  },
-];
 
 export default function Login() {
   const { iniciarSesion, autenticado, cargando } = useAuth();
   const navegar = useNavigate();
   const ubicacion = useLocation();
 
-  const [rol, setRol] = useState('ADMIN_COMEX');
-  // Los campos arrancan vacios: el correo y la contrasena no deben quedar
-  // escritos en pantalla. El selector de perfil de arriba los completa al
-  // hacer clic en el rol correspondiente.
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -62,14 +39,6 @@ export default function Login() {
 
   if (autenticado) {
     return <Navigate to={ubicacion.state?.desde ?? '/cotizador'} replace />;
-  }
-
-  /** Cambiar de rol completa los campos con el usuario correspondiente. */
-  function cambiarRol(nuevoRol) {
-    setRol(nuevoRol);
-    setEmail(USUARIOS_DEMO[nuevoRol].email);
-    setPassword(USUARIOS_DEMO[nuevoRol].password);
-    setError(null);
   }
 
   async function enviar(evento) {
@@ -107,24 +76,6 @@ export default function Login() {
           )}
 
           <form onSubmit={enviar} noValidate>
-            <div className="campo">
-              <span className="campo__etiqueta">Perfil de acceso</span>
-              <div className="selector-rol">
-                {OPCIONES_ROL.map((opcion) => (
-                  <button
-                    key={opcion.valor}
-                    type="button"
-                    className={`selector-rol__opcion${rol === opcion.valor ? ' selector-rol__opcion--activa' : ''}`}
-                    onClick={() => cambiarRol(opcion.valor)}
-                    aria-pressed={rol === opcion.valor}
-                  >
-                    <span className="selector-rol__titulo">{opcion.titulo}</span>
-                    <span className="selector-rol__detalle">{opcion.detalle}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <Campo etiqueta="Correo electronico" htmlFor="email" requerido>
               <input
                 id="email"
@@ -158,6 +109,11 @@ export default function Login() {
               {enviando ? <span className="boton__spinner" /> : 'Iniciar sesion'}
             </button>
           </form>
+
+          <p className="acceso__pie">
+            {'No tiene cuenta? '}
+            <Link to="/registro">Solicitar acceso con codigo de invitacion</Link>
+          </p>
         </div>
       </div>
     </div>

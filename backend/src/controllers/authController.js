@@ -10,8 +10,7 @@
  */
 
 import * as authService from '../services/authService.js';
-import * as usuarioModel from '../models/usuarioModel.js';
-import { ApiError } from '../utils/ApiError.js';
+import * as usuarioService from '../services/usuarioService.js';
 import { logger } from '../utils/logger.js';
 import { ROLES } from '../utils/constantes.js';
 
@@ -68,20 +67,61 @@ export async function login(req, res) {
 }
 
 /**
+ * POST /api/v1/auth/registro
+ *
+ * Publico, pero exige codigo de invitacion. No se pide confirmacion por correo
+ * porque el proyecto no tiene libreria de correo: la cuenta nace activa.
+ *
+ * Se devuelve un token ya firmado para que la persona entre de inmediato sin
+ * pasar por el login. Como el rol queda fijo en ANALISTA (lo decide el modelo,
+ * no lo que llegue en el body), no hay ninguna forma de que alguien se
+ * registre como administrador por esta via.
+ */
+export async function registro(req, res) {
+  const { nombre, email, password, passwordRepeticion, codigoInvitacion } = req.body;
+
+  const { usuario } = await usuarioService.registrarUsuario({
+    nombre,
+    email,
+    password,
+    passwordRepeticion,
+    codigoInvitacion,
+  });
+
+  const { token, expiraEn } = authService.firmarToken({
+    id: usuario.id,
+    email: usuario.email,
+    rol: usuario.rol,
+  });
+
+  logger.info(`Registro de nuevo analista: ${usuario.email}`);
+
+  res.status(201).json({
+    exito: true,
+    mensaje: 'Cuenta creada correctamente. Ya puede comenzar a cotizar.',
+    datos: {
+      token,
+      expiraEn,
+      usuario: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,
+        rolNombre: usuario.rolNombre,
+      },
+    },
+  });
+}
+
+/**
  * GET /api/v1/auth/me
  *
- * Requiere token. Se relee el usuario desde la base en vez de confiar solo en
- * el token: si a alguien se lo desactivan, su token deja de servir de inmediato
- * sin necesidad de esperar a que caduque.
+ * Requiere token. No vuelve a leer la base: `requiereAuth` ya dejo en
+ * `req.usuario` la fila vigente, con `activo` y `rol` tomados del servidor y
+ * no del token. Consultar de nuevo seria la misma lectura dos veces.
  */
 export async function miPerfil(req, res) {
-  const usuario = await usuarioModel.buscarPorId(req.usuario.id);
-
-  if (!usuario || !usuario.activo) {
-    throw ApiError.noAutorizado('La sesion ya no es valida. Inicie sesion nuevamente.', {
-      codigo: 'SESION_INVALIDA',
-    });
-  }
+  const usuario = req.usuario;
 
   res.json({
     exito: true,

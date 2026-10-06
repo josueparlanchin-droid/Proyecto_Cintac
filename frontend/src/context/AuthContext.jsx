@@ -85,6 +85,23 @@ export function ProveedorAuth({ children }) {
     return perfil;
   }, []);
 
+  /**
+   * Alta de cuenta con codigo de invitacion.
+   *
+   * Reutiliza el mismo camino que `iniciarSesion` a proposito. La API ya
+   * devuelve token en el registro, asi que la sesion queda abierta sin un
+   * segundo viaje al servidor solo para consequences de permisos.
+   */
+  const registrar = useCallback(async (datos) => {
+    const respuesta = await api.registro(datos);
+    guardarToken(respuesta.datos.token);
+
+    const { datos: perfil } = await api.perfil();
+    setUsuario(perfil);
+
+    return perfil;
+  }, []);
+
   const cerrarSesion = useCallback(() => {
     borrarToken();
     setUsuario(null);
@@ -99,10 +116,11 @@ export function ProveedorAuth({ children }) {
       esAdmin: usuario?.rol === 'ADMIN_COMEX',
       permisos: usuario?.permisos ?? null,
       iniciarSesion,
+      registrar,
       cerrarSesion,
       ErrorApi,
     }),
-    [usuario, cargando, iniciarSesion, cerrarSesion],
+    [usuario, cargando, iniciarSesion, registrar, cerrarSesion],
   );
 
   return <ContextoAuth.Provider value={valor}>{children}</ContextoAuth.Provider>;

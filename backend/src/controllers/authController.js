@@ -69,24 +69,31 @@ export async function login(req, res) {
 /**
  * POST /api/v1/auth/registro
  *
- * Publico, pero exige codigo de invitacion. No se pide confirmacion por correo
- * porque el proyecto no tiene libreria de correo: la cuenta nace activa.
- *
- * Se devuelve un token ya firmado para que la persona entre de inmediato sin
- * pasar por el login. Como el rol queda fijo en ANALISTA (lo decide el modelo,
- * no lo que llegue en el body), no hay ninguna forma de que alguien se
- * registre como administrador por esta via.
+ * Publico, pero exige codigo de invitacion.
+ * Las cuentas nacen pendientes de aprobacion por Jefatura Comex y no
+ * reciben token hasta ser aprobadas.
  */
 export async function registro(req, res) {
   const { nombre, email, password, passwordRepeticion, codigoInvitacion } = req.body;
 
-  const { usuario } = await usuarioService.registrarUsuario({
+  const resultado = await usuarioService.registrarUsuario({
     nombre,
     email,
     password,
     passwordRepeticion,
     codigoInvitacion,
   });
+
+  const usuario = resultado.usuario;
+
+  if (resultado.pendiente || !usuario?.activo) {
+    logger.info(`Solicitud de registro pendiente: ${usuario?.email}`);
+    return res.status(201).json({
+      exito: true,
+      mensaje: 'Solicitud enviada. Pendiente de aprobación por Jefatura Comex.',
+      datos: { pendiente: true },
+    });
+  }
 
   const { token, expiraEn } = authService.firmarToken({
     id: usuario.id,

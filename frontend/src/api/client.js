@@ -227,6 +227,12 @@ export const api = {
   /** PATCH /usuarios/:id/activo */
   cambiarActivo: (id, activo) =>
     peticion(`/usuarios/${id}/activo`, { metodo: 'PATCH', cuerpo: { activo } }),
+
+  /** PATCH /usuarios/:id/aprobar */
+  aprobarUsuario: (id) => peticion(`/usuarios/${id}/aprobar`, { metodo: 'PATCH' }),
+
+  /** PATCH /usuarios/:id/rechazar */
+  rechazarUsuario: (id) => peticion(`/usuarios/${id}/rechazar`, { metodo: 'PATCH' }),
 };
 
 export default api;

@@ -84,13 +84,16 @@ export async function actualizarPassword(id, passwordHash) {
  * SELECT previo deja una carrera entre dos registros simultaneos con el
  * mismo correo.
  *
+ * La cuenta se crea con activo = FALSE para que quede pendiente de aprobacion
+ * por parte de Jefatura Comex. Solo tras la aprobacion podra iniciar sesion.
+ *
  * @param {{nombre:string, email:string, passwordHash:string}} datos
  * @returns {Promise<object|null>} la fila creada, o null si el correo ya existia.
  */
 export async function registrar({ nombre, email, passwordHash }) {
   return queryOne(
     `INSERT INTO usuarios (nombre, email, password, rol, activo)
-     VALUES ($1, $2, $3, 'ANALISTA', TRUE)
+     VALUES ($1, $2, $3, 'ANALISTA', FALSE)
      ON CONFLICT (email) DO NOTHING
      RETURNING ${CAMPOS_PUBLICOS}`,
     [nombre, email.toLowerCase().trim(), passwordHash],

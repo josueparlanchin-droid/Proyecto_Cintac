@@ -150,7 +150,7 @@ export async function login({ email, password, ip }) {
   }
 
   if (!fila.activo) {
-    throw ApiError.prohibido('El usuario esta desactivado. Contacte a Jefatura Comex.');
+    throw ApiError.prohibido('Tu cuenta esta pendiente de aprobacion por Jefatura Comex.');
   }
 
   // El acceso fue legitimo: se borra el historial de fallos de esta cuenta para

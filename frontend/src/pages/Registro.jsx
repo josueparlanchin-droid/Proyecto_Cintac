@@ -102,10 +102,14 @@ export default function Registro() {
         passwordRepeticion: formulario.passwordRepeticion,
       });
 
-      setExito(`Bienvenido, ${perfil.nombre}. Su cuenta de Analista ya esta lista.`);
-      // La sesion ya quedo abierta en el registro, asi que no hace falta pasar
-      // por el login. El retardo deja leer el mensaje de exito.
-      setTimeout(() => navegar('/cotizador', { replace: true }), 1200);
+      setExito('Solicitud enviada. Pendiente de aprobación por Jefatura Comex.');
+      setFormulario({
+        nombre: '',
+        email: '',
+        codigoInvitacion: '',
+        password: '',
+        passwordRepeticion: '',
+      });
     } catch (fallo) {
       setError({ mensaje: fallo.message, detalle: fallo.detalle, codigo: fallo.codigo });
     } finally {

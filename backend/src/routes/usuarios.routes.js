@@ -35,5 +35,7 @@ router.patch(
   validarBody(esquemaCambioActivo),
   controller.cambiarActivo,
 );
+router.patch('/:id/aprobar', validar({ params: esquemaIdUsuario }), controller.aprobar);
+router.patch('/:id/rechazar', validar({ params: esquemaIdUsuario }), controller.rechazar);
 
 export default router;

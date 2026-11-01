@@ -209,13 +209,13 @@ export async function registrarUsuario({
       administradorEmail: null,
       accion: 'REGISTRO',
       rolNuevo: creado.rol,
-      detalle: 'Alta mediante auto-registro con codigo de invitacion.',
+      detalle: 'Solicitud de registro pendiente de aprobacion por Jefatura Comex.',
     });
 
     return creado;
   });
 
-  return { usuario: await proyectar(fila) };
+  return { usuario: await proyectar(fila), pendiente: true };
 }
 
 // ==================================================================
@@ -404,4 +404,92 @@ export async function cambiarActivo({ administradorId, objetivoId, activo }) {
       ? `${usuario.nombre} fue reactivado.`
       : `${usuario.nombre} fue desactivado y ya no puede iniciar sesion.`,
   };
+}
+
+/**
+ * Aprueba una solicitud de registro pendiente.
+ */
+export async function aprobarSolicitud({ administradorId, objetivoId }) {
+  const actualizada = await enTransaccion(async () => {
+    const administradores = await bloquearAdministradoresActivos();
+
+    const objetivo = await buscarPorIdBloqueado(objetivoId);
+    if (!objetivo) {
+      throw ApiError.noEncontrado(
+        `No existe una cuenta con el id ${objetivoId}.`,
+        { codigo: 'USUARIO_NO_ENCONTRADO' },
+      );
+    }
+
+    if (objetivo.activo) {
+      throw ApiError.conflicto('La cuenta ya esta activa.', { codigo: 'ESTADO_SIN_CAMBIO' });
+    }
+
+    verificarSalvaguardas({
+      administradorId,
+      objetivo,
+      administradoresActivos: administradores.length,
+      nuevoRol: null,
+      vaADesactivar: false,
+    });
+
+    const fila = await actualizarActivo(objetivoId, true);
+
+    await registrarAuditoria({
+      usuarioObjetivoId: objetivoId,
+      administradorId,
+      administradorEmail: await correoDelAdministrador(administradorId),
+      accion: 'ACTIVAR',
+      detalle: 'Solicitud de registro aprobada por Jefatura Comex.',
+    });
+
+    return fila;
+  });
+
+  const usuario = await proyectar(actualizada);
+  return { usuario, mensaje: `${usuario.nombre} fue aprobado. Ya puede iniciar sesion.` };
+}
+
+/**
+ * Rechaza una solicitud de registro pendiente (manteniendo la cuenta como inactiva).
+ */
+export async function rechazarSolicitud({ administradorId, objetivoId }) {
+  const actualizada = await enTransaccion(async () => {
+    const administradores = await bloquearAdministradoresActivos();
+
+    const objetivo = await buscarPorIdBloqueado(objetivoId);
+    if (!objetivo) {
+      throw ApiError.noEncontrado(
+        `No existe una cuenta con el id ${objetivoId}.`,
+        { codigo: 'USUARIO_NO_ENCONTRADO' },
+      );
+    }
+
+    if (objetivo.activo) {
+      throw ApiError.conflicto('Solo se pueden rechazar solicitudes pendientes.', { codigo: 'ESTADO_SIN_CAMBIO' });
+    }
+
+    verificarSalvaguardas({
+      administradorId,
+      objetivo,
+      administradoresActivos: administradores.length,
+      nuevoRol: null,
+      vaADesactivar: false,
+    });
+
+    const fila = await actualizarActivo(objetivoId, false);
+
+    await registrarAuditoria({
+      usuarioObjetivoId: objetivoId,
+      administradorId,
+      administradorEmail: await correoDelAdministrador(administradorId),
+      accion: 'DESACTIVAR',
+      detalle: 'Solicitud de registro rechazada por Jefatura Comex.',
+    });
+
+    return fila;
+  });
+
+  const usuario = await proyectar(actualizada);
+  return { usuario, mensaje: `${usuario.nombre} fue rechazado.` };
 }

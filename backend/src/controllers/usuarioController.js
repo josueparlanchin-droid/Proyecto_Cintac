@@ -97,3 +97,25 @@ export async function cambiarActivo(req, res) {
     datos: { usuario },
   });
 }
+
+export async function aprobar(req, res) {
+  const { id } = req.params;
+  const { usuario, mensaje } = await usuarioService.aprobarSolicitud({
+    administradorId: req.usuario.id,
+    objetivoId: Number(id),
+  });
+
+  logger.info(`El administrador ${req.usuario.email} aprobo la solicitud de ${usuario.email}`);
+  res.json({ exito: true, mensaje, datos: { usuario } });
+}
+
+export async function rechazar(req, res) {
+  const { id } = req.params;
+  const { usuario, mensaje } = await usuarioService.rechazarSolicitud({
+    administradorId: req.usuario.id,
+    objetivoId: Number(id),
+  });
+
+  logger.info(`El administrador ${req.usuario.email} rechazo la solicitud de ${usuario.email}`);
+  res.json({ exito: true, mensaje, datos: { usuario } });
+}

@@ -85,6 +85,15 @@ export default function Usuarios() {
     });
   }, [datos]);
 
+  const solicitudesPendientes = useMemo(
+    () => usuarios.filter((u) => !u.activo),
+    [usuarios],
+  );
+  const usuariosActivosLista = useMemo(
+    () => usuarios.filter((u) => u.activo),
+    [usuarios],
+  );
+
   async function aplicar(cambio) {
     setOcupado(cambio.id);
     setError(null);
@@ -123,6 +132,20 @@ export default function Usuarios() {
     return {
       id: usuario.id,
       ejecutar: () => api.cambiarActivo(usuario.id, activo),
+    };
+  }
+
+  function aprobar(usuario) {
+    return {
+      id: usuario.id,
+      ejecutar: () => api.aprobarUsuario(usuario.id),
+    };
+  }
+
+  function rechazar(usuario) {
+    return {
+      id: usuario.id,
+      ejecutar: () => api.rechazarUsuario(usuario.id),
     };
   }
 
@@ -178,6 +201,81 @@ export default function Usuarios() {
         <Alerta tipo="exito" onCerrar={() => setAviso(null)}>
           {aviso}
         </Alerta>
+      )}
+
+      {solicitudesPendientes.length > 0 && (
+        <div className="tarjeta" style={{ marginBottom: '1.5rem' }}>
+          <header className="tarjeta__cabecera">
+            <div>
+              <h2 className="tarjeta__titulo">Solicitudes pendientes</h2>
+              <p className="tarjeta__subtitulo">Cuentas que esperan aprobación de Jefatura Comex</p>
+            </div>
+          </header>
+          <div className="tabla-envoltorio">
+            <table className="tabla tabla--usuarios">
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Correo</th>
+                  <th>Solicitud enviada</th>
+                  <th className="tabla__acciones">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {solicitudesPendientes.map((usuario) => {
+                  const enCurso = ocupado === usuario.id;
+                  return (
+                    <tr key={usuario.id}>
+                      <td>
+                        <div className="celda-usuario">
+                          <span className="celda-usuario__nombre">{usuario.nombre}</span>
+                        </div>
+                      </td>
+                      <td className="celda-fecha">{usuario.email}</td>
+                      <td className="celda-fecha">{fechaLegible(usuario.creado_en)}</td>
+                      <td className="tabla__acciones">
+                        <div className="acciones-fila">
+                          <button
+                            type="button"
+                            className="boton boton--principal boton--pequeno"
+                            disabled={enCurso}
+                            onClick={() =>
+                              setConfirmacion({
+                                usuario,
+                                cambio: aprobar(usuario),
+                                titulo: 'Aprobar solicitud',
+                                texto: 'Aprobar',
+                                cuerpo: `${usuario.nombre} podrá iniciar sesión al ser aprobado.`,
+                              })
+                            }
+                          >
+                            Aprobar
+                          </button>
+                          <button
+                            type="button"
+                            className="boton boton--secundario boton--pequeno"
+                            disabled={enCurso}
+                            onClick={() =>
+                              setConfirmacion({
+                                usuario,
+                                cambio: rechazar(usuario),
+                                titulo: 'Rechazar solicitud',
+                                texto: 'Rechazar',
+                                cuerpo: `${usuario.nombre} seguirá inactivo y quedará registrado en la bitácora.`,
+                              })
+                            }
+                          >
+                            Rechazar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       <div className="tarjeta">

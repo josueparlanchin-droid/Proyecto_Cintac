@@ -27,6 +27,7 @@ import * as tarifaModel from '../models/tarifaModel.js';
 import * as cotizacionModel from '../models/cotizacionModel.js';
 import { simular } from '../services/calculoService.js';
 import {
+  CAPACIDAD_POR_TIPO,
   MAX_TONELADAS_POR_CONTENEDOR,
   TIPO_CONTENEDOR_DEFAULT,
 } from '../utils/constantes.js';
@@ -69,15 +70,20 @@ const PUERTOS = [
   { nombre: 'Manzanillo (MX)', pais_origen: 'Mexico',        region: 'AMERICA', codigo: 'MXZLO' },
   { nombre: 'Cartagena',       pais_origen: 'Colombia',      region: 'AMERICA', codigo: 'COCTG' },
 
-  // --- Chile (destino) ---
+  // --- Chile ---
   { nombre: 'Valparaiso',      pais_origen: 'Chile',         region: 'CHILE',  codigo: 'CLVAP' },
   { nombre: 'San Antonio',     pais_origen: 'Chile',         region: 'CHILE',  codigo: 'CLSAI' },
   { nombre: 'San Vicente',     pais_origen: 'Chile',         region: 'CHILE',  codigo: 'CLSAV' },
+
+  // --- Peru ---
+  { nombre: 'Callao',          pais_origen: 'Peru',          region: 'AMERICA', codigo: 'PECLL' },
 ];
 
 // ==================================================================
 // 3. TARIFAS DE FLETE POR RUTA
-//    precio en USD por contenedor 40'HC, dias de viaje base directo.
+//    precio en USD por contenedor, dias de viaje base directo.
+//    Las rutas historicas usan 40'HC (25 tn). Las rutas Chile -> Callao
+//    se tarifan en 20 pies (23 tn) y 40 pies (25 tn).
 // ==================================================================
 const TARIFAS = [
   // Shanghai -> Chile
@@ -124,15 +130,25 @@ const TARIFAS = [
   { origen: 'COCTG', destino: 'CLVAP', precio_usd: 980, dias_viaje_base: 8 },
   { origen: 'COCTG', destino: 'CLSAI', precio_usd: 1040, dias_viaje_base: 9 },
   { origen: 'COCTG', destino: 'CLSAV', precio_usd: 1080, dias_viaje_base: 10 },
+
+  // San Antonio (Chile) -> Callao (Peru), ruta directa
+  { origen: 'CLSAI', destino: 'PECLL', tipo_contenedor: '20', capacidad_max_tn: CAPACIDAD_POR_TIPO['20'], precio_usd: 900, dias_viaje_base: 5 },
+  { origen: 'CLSAI', destino: 'PECLL', tipo_contenedor: '40', capacidad_max_tn: CAPACIDAD_POR_TIPO['40'], precio_usd: 970, dias_viaje_base: 5 },
+
+  // Valparaiso (Chile) -> Callao (Peru), ruta directa
+  { origen: 'CLVAP', destino: 'PECLL', tipo_contenedor: '20', capacidad_max_tn: CAPACIDAD_POR_TIPO['20'], precio_usd: 900, dias_viaje_base: 5 },
+  { origen: 'CLVAP', destino: 'PECLL', tipo_contenedor: '40', capacidad_max_tn: CAPACIDAD_POR_TIPO['40'], precio_usd: 970, dias_viaje_base: 5 },
 ];
 
 // ==================================================================
 // 4. COTIZACIONES DE EJEMPLO
 //    Casos pensados para que el historial muestre variedad y, sobre
-//    todo, los casos borde del limite de 25 tn por contenedor:
-//      - 24.000 kg   -> 24 tn    -> 1 contenedor (casi lleno)
+//    todo, los casos borde del limite de carga por contenedor:
+//      - 24.000 kg   -> 24 tn    -> 1 contenedor 40 pies (casi lleno)
 //      - 25.001 kg   -> 25.001tn -> 2 contenedores (excede el limite)
 //      - 25.000 kg   -> 25 tn    -> 1 contenedor (justo en el limite)
+//      - 21.000 kg   -> 21 tn    -> 1 contenedor de 20 pies (23 tn)
+//    El ultimo caso de la lista no informa valor de la carga.
 // ==================================================================
 const COTIZACIONES_EJEMPLO = [
   { peso_kg: 18_400,   valor_mercaderia_usd: 62_000,   origen: 'CNSHA', destino: 'CLVAP', dias_contingencia: 4 },
@@ -148,6 +164,10 @@ const COTIZACIONES_EJEMPLO = [
   { peso_kg: 19_750,   valor_mercaderia_usd: 71_800,   origen: 'USMIA', destino: 'CLSAI', dias_contingencia: 2 },
   { peso_kg: 31_200,   valor_mercaderia_usd: 128_500,  origen: 'MXZLO', destino: 'CLSAV', dias_contingencia: 8 },
   { peso_kg: 9_800,    valor_mercaderia_usd: 44_600,   origen: 'COCTG', destino: 'CLVAP', dias_contingencia: 1 },
+
+  // Rutas Chile -> Callao: un caso en 20 pies y otro sin valor de carga.
+  { peso_kg: 21_000,   valor_mercaderia_usd: 75_000,   origen: 'CLSAI', destino: 'PECLL', tipo_contenedor: '20', dias_contingencia: 2 },
+  { peso_kg: 22_000,   valor_mercaderia_usd: null,      origen: 'CLVAP', destino: 'PECLL', tipo_contenedor: '40HC', dias_contingencia: 0 },
 ];
 
 /**
@@ -227,15 +247,18 @@ export async function sembrar() {
       await tarifaModel.guardar({
         puerto_origen_id: origenId,
         puerto_destino_id: destinoId,
-        tipo_contenedor: TIPO_CONTENEDOR_DEFAULT,
+        tipo_contenedor: tarifa.tipo_contenedor ?? TIPO_CONTENEDOR_DEFAULT,
         precio_usd: tarifa.precio_usd,
         dias_viaje_base: tarifa.dias_viaje_base,
-        capacidad_max_tn: MAX_TONELADAS_POR_CONTENEDOR,
+        capacidad_max_tn: tarifa.capacidad_max_tn ?? MAX_TONELADAS_POR_CONTENEDOR,
       });
     }
   });
 
-  logger.info(`Rutas tarifadas: ${await tarifaModel.contar()} (limite de ${MAX_TONELADAS_POR_CONTENEDOR} tn por contenedor)`);
+  logger.info(
+    `Rutas tarifadas: ${await tarifaModel.contar()} ` +
+      `(20 pies: ${CAPACIDAD_POR_TIPO['20']} tn | 40 pies: ${CAPACIDAD_POR_TIPO['40']} tn)`,
+  );
 
   // ---------------------------------------------------------------
   // Cotizaciones de ejemplo
@@ -266,7 +289,7 @@ export async function sembrar() {
             puerto_origen_id: idPorCodigo.get(caso.origen),
             puerto_destino_id: idPorCodigo.get(caso.destino),
             dias_contingencia: caso.dias_contingencia,
-            tipo_contenedor: TIPO_CONTENEDOR_DEFAULT,
+            tipo_contenedor: caso.tipo_contenedor ?? TIPO_CONTENEDOR_DEFAULT,
             usuario_id: usuarioId,
             guardar: true,
           });

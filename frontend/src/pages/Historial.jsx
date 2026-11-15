@@ -133,6 +133,7 @@ export default function Historial() {
           toneladas: cotizacion.toneladas,
           cantidad_contenedores: cotizacion.cantidad_contenedores,
           tipo_contenedor: cotizacion.tipo_contenedor,
+          capacidad_max_tn: cotizacion.capacidad_max_tn,
           ocupacion_ultimo_contenedor_pct: 100,
           puerto_origen: {
             nombre: cotizacion.puerto_origen,
@@ -142,7 +143,8 @@ export default function Historial() {
           },
           puerto_destino: {
             nombre: cotizacion.puerto_destino,
-            pais: 'Chile',
+            pais: cotizacion.puerto_destino_pais ?? 'Chile',
+            region: cotizacion.puerto_destino_region ?? 'CHILE',
             codigo: cotizacion.puerto_destino_codigo,
           },
           valor_mercaderia_usd: cotizacion.valor_mercaderia_usd,
@@ -320,7 +322,9 @@ export default function Historial() {
                           {c.puerto_origen_codigo}
                         </Insignia>
                         <span style={{ margin: '0 0.35rem', color: 'var(--gris-humo)' }}>→</span>
-                        <Insignia variante="chile">{c.puerto_destino_codigo}</Insignia>
+                        <Insignia variante={claseRegion(c.puerto_destino_region).replace('insignia--', '')}>
+                          {c.puerto_destino_codigo}
+                        </Insignia>
                         <div style={{ fontSize: 'var(--texto-xs)', color: 'var(--gris-claro)', marginTop: '0.2rem' }}>
                           {c.puerto_origen} → {c.puerto_destino}
                         </div>

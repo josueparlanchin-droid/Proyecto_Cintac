@@ -36,6 +36,10 @@ const num = (valor, decimales = 0) =>
     maximumFractionDigits: decimales,
   });
 
+/** Monto opcional: el valor de la carga puede no haber sido informado. */
+const montoOpcional = (valor) =>
+  valor === null || valor === undefined ? 'No informado' : num(valor, 2);
+
 /**
  * Dibuja el membrete: bloque de color con el nombre de la empresa.
  *
@@ -131,11 +135,14 @@ export function generarInformePDF(r, usuario) {
     ocupacion_ultimo_contenedor_pct: ocupacion,
     cotizacion_id: cotizacionId,
     fecha_creacion: fechaCreacion,
+    capacidad_max_tn: capacidadMaxTn,
     parametros,
   } = r;
 
   const doc = new jsPDF({ unit: 'mm', format: 'A4', orientation: 'portrait' });
-  const limiteTn = parametros?.limite_toneladas_por_contenedor ?? 25;
+  const limiteTn =
+    capacidadMaxTn ?? parametros?.limite_toneladas_por_contenedor ?? 25;
+  const tieneValorCarga = valorMercaderia !== null && valorMercaderia !== undefined;
 
   let y = membrete(doc, 18);
 
@@ -153,7 +160,7 @@ export function generarInformePDF(r, usuario) {
   doc.setFontSize(8.5);
   doc.setTextColor(...COLOR.grisClaro);
   doc.text(
-    `Simulacion de flete maritimo e impuesto ad valorem 19% sobre valor CIF`,
+    `Simulacion de flete maritimo y valor de la carga (impuesto 19% CIF informativo)`,
     MARGEN,
     y,
   );
@@ -205,11 +212,11 @@ export function generarInformePDF(r, usuario) {
         'Puerto de origen',
         `${origen.nombre}, ${origen.pais}`,
         'Puerto de destino',
-        `${destino.nombre}, Chile`,
+        `${destino.nombre}, ${destino.pais}`,
       ],
       ['Codigo de puerto', `${origen.codigo} / ${destino.codigo}`, 'Ruta', 'Trasoceanico'],
       ['Peso declarado', `${num(pesoKg, 3)} kg`, 'Peso en toneladas', `${num(toneladas, 3)} tn`],
-      ['Tipo de contenedor', tipoContenedor, 'Limite por contenedor', `${limiteTn} tn`],
+      ['Tipo de contenedor', tipoContenedor, 'Capacidad por contenedor', `${limiteTn} tn`],
       ['Contenedores requeridos', `${contenedores}`, 'Ocupacion ultimo', `${num(ocupacion, 1)} %`],
       [
         'Dias de viaje base',
@@ -256,28 +263,38 @@ export function generarInformePDF(r, usuario) {
     body: [
       [
         'Valor de la mercaderia (FOB)',
-        'Valor declarado sin flete',
-        num(valorMercaderia, 2),
+        tieneValorCarga ? 'Valor declarado sin flete' : 'No informado',
+        montoOpcional(valorMercaderia),
       ],
       [
         'Flete maritimo',
         `${contenedores} x ${tipoContenedor} @ ${num(precioContenedor, 2)}`,
         num(costoFlete, 2),
       ],
-      ['Seguro de carga', '1,0% sobre valor de la mercaderia', num(seguro, 2)],
+      [
+        'Seguro de carga',
+        tieneValorCarga ? '1,0% sobre valor de la mercaderia' : 'No aplica sin valor de carga',
+        num(seguro, 2),
+      ],
       [
         { content: 'VALOR CIF', styles: { fontStyle: 'bold' } },
-        { content: 'Mercaderia + flete + seguro', styles: { fontStyle: 'italic' } },
+        {
+          content: tieneValorCarga ? 'Mercaderia + flete + seguro' : 'No aplica sin valor de carga',
+          styles: { fontStyle: 'italic' },
+        },
         { content: num(valorCif, 2), styles: { fontStyle: 'bold' } },
       ],
       [
         'Impuesto ad valorem 19%',
-        '19% sobre el valor CIF',
+        tieneValorCarga ? '19% sobre el valor CIF (informativo)' : 'No aplica sin valor de carga',
         num(impuesto, 2),
       ],
       [
         { content: 'COSTO TOTAL DE LA IMPORTACION', styles: { fontStyle: 'bold', textColor: COLOR.terracota } },
-        { content: 'Flete + impuesto', styles: { fontStyle: 'italic' } },
+        {
+          content: tieneValorCarga ? 'Flete + valor de la carga' : 'Solo flete',
+          styles: { fontStyle: 'italic' },
+        },
         {
           content: num(costoTotal, 2),
           styles: { fontStyle: 'bold', textColor: COLOR.terracota },
@@ -301,10 +318,20 @@ export function generarInformePDF(r, usuario) {
     `toneladas      = ${num(pesoKg, 3)} kg / 1000 = ${num(toneladas, 3)} tn`,
     `contenedores   = ceil(${num(toneladas, 3)} / ${limiteTn}) = ${contenedores}`,
     `flete          = ${contenedores} x ${num(precioContenedor, 2)} = ${num(costoFlete, 2)} USD`,
-    `seguro         = ${num(valorMercaderia, 2)} x 1,00% = ${num(seguro, 2)} USD`,
-    `CIF            = ${num(valorMercaderia, 2)} + ${num(costoFlete, 2)} + ${num(seguro, 2)} = ${num(valorCif, 2)} USD`,
-    `impuesto 19%   = ${num(valorCif, 2)} x 19% = ${num(impuesto, 2)} USD`,
-    `costo total    = ${num(costoFlete, 2)} + ${num(impuesto, 2)} = ${num(costoTotal, 2)} USD`,
+    ...(tieneValorCarga
+      ? [
+          `seguro         = ${num(valorMercaderia, 2)} x 1,00% = ${num(seguro, 2)} USD`,
+          `CIF            = ${num(valorMercaderia, 2)} + ${num(costoFlete, 2)} + ${num(seguro, 2)} = ${num(valorCif, 2)} USD`,
+          `impuesto 19%   = ${num(valorCif, 2)} x 19% = ${num(impuesto, 2)} USD (informativo)`,
+          `costo total    = ${num(costoFlete, 2)} + ${num(valorMercaderia, 2)} = ${num(costoTotal, 2)} USD`,
+        ]
+      : [
+          'valor carga    = no informado',
+          'seguro         = 0 (sin valor de carga)',
+          'CIF            = no aplica',
+          'impuesto 19%   = 0 (sin valor de carga)',
+          `costo total    = ${num(costoFlete, 2)} + 0 = ${num(costoTotal, 2)} USD`,
+        ]),
     `transito       = ${diasBase} + ${diasContingencia} = ${diasTransito} dias`,
   ];
 
@@ -333,7 +360,7 @@ export function generarInformePDF(r, usuario) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.text(
-    `Importar ${num(toneladas, 3)} toneladas desde ${origen.nombre} (${origen.pais}) a ${destino.nombre}, Chile.`,
+    `Importar ${num(toneladas, 3)} toneladas desde ${origen.nombre} (${origen.pais}) a ${destino.nombre} (${destino.pais}).`,
     MARGEN + 5,
     y + 12,
   );
@@ -346,7 +373,11 @@ export function generarInformePDF(r, usuario) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(...COLOR.terracota);
-  doc.text(`Costo total: ${usd(costoTotal)}`, MARGEN + 5, y + 20);
+  doc.text(
+    `Costo total ${tieneValorCarga ? '(flete + valor de la carga)' : '(solo flete)'}: ${usd(costoTotal)}`,
+    MARGEN + 5,
+    y + 20,
+  );
 
   // ------------------------------------------------------------------
   // Validacion y descarga

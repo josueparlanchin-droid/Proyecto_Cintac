@@ -1,13 +1,22 @@
 /**
  * controllers/puertoController.js
  * -----------------------------------------------------------------
- * Catalogo de puertos de origen internacional y de destino en Chile.
+ * Catalogo de puertos de origen y destino.
+ *
+ * Las dos listas se construyen a partir de las rutas que tienen tarifa:
+ * la base decide que combinaciones son cotizables, no una regla fija de
+ * regiones en el codigo.
  */
 
 import * as puertoModel from '../models/puertoModel.js';
 import { queryOne } from '../config/db.js';
 import { logger } from '../utils/logger.js';
-import { REGIONES, TIPO_CONTENEDOR_DEFAULT, MAX_TONELADAS_POR_CONTENEDOR } from '../utils/constantes.js';
+import {
+  CAPACIDAD_POR_TIPO,
+  REGIONES,
+  TIPO_CONTENEDOR_DEFAULT,
+  MAX_TONELADAS_POR_CONTENEDOR,
+} from '../utils/constantes.js';
 import { estadoContadores } from '../middleware/rateLimit.js';
 
 /**
@@ -30,10 +39,11 @@ export async function listar(req, res) {
     });
   }
 
-  const todos = await puertoModel.listar();
-
-  const origen = todos.filter((p) => p.region !== 'CHILE');
-  const destino = todos.filter((p) => p.region === 'CHILE');
+  const [origen, destino, todos] = await Promise.all([
+    puertoModel.listarOrigenesConTarifa(),
+    puertoModel.listarDestinosConTarifa(),
+    puertoModel.listar(),
+  ]);
 
   // Agrupar por region preserva el orden logico del formulario.
   const origenPorRegion = {};
@@ -53,6 +63,7 @@ export async function listar(req, res) {
     parametros: {
       tipoContenedorSugerido: TIPO_CONTENEDOR_DEFAULT,
       limiteToneladasPorContenedor: MAX_TONELADAS_POR_CONTENEDOR,
+      capacidadesPorTipo: CAPACIDAD_POR_TIPO,
     },
   });
 }

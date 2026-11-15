@@ -97,10 +97,16 @@ function pedir(ruta, { metodo = 'GET', token = null, cuerpo = null, cabeceras = 
 function esperado(toneladas, capacidad, precioCont, valorMerc) {
   const contenedores = Math.max(Math.ceil(toneladas / capacidad), 1);
   const flete = Math.round(contenedores * precioCont * 100) / 100;
-  const seguro = Math.round(valorMerc * 0.01 * 100) / 100;
-  const cif = Math.round((valorMerc + flete + seguro) * 100) / 100;
-  const impuesto = Math.round(cif * 0.19 * 100) / 100;
-  return { contenedores, flete, impuesto, total: Math.round((flete + impuesto) * 100) / 100 };
+  const tieneValor = valorMerc !== null && valorMerc !== undefined;
+
+  const seguro = tieneValor ? Math.round(valorMerc * 0.01 * 100) / 100 : 0;
+  const cif = tieneValor ? Math.round((valorMerc + flete + seguro) * 100) / 100 : 0;
+  const impuesto = tieneValor ? Math.round(cif * 0.19 * 100) / 100 : 0;
+
+  // El total cotizado es flete + valor de la carga; el impuesto es informativo.
+  const total = Math.round((flete + (tieneValor ? valorMerc : 0)) * 100) / 100;
+
+  return { contenedores, flete, seguro, cif, impuesto, total };
 }
 
 // ==================================================================
@@ -226,25 +232,26 @@ async function main() {
     );
 
     const alta = await comprobar(
-      'POST /auth/registro - alta valida -> 201 con token inmediato',
+      'POST /auth/registro - alta valida -> 201 pendiente, sin token',
       pedir('/auth/registro', { metodo: 'POST', cuerpo: cuerpoAlta }),
-      (c) => c.exito
-        && c.datos.token.length > 50
-        && c.datos.usuario.rol === 'ANALISTA'
-        && !('password' in c.datos.usuario),
+      (c) => c.exito && c.datos.pendiente === true && !c.datos.token,
       {
         statusEsperado: 201,
-        mostrar: (c) => `id=${c.datos.usuario.id}, rol=${c.datos.usuario.rol}`,
+        mostrar: (c) => `pendiente=${c.datos.pendiente}`,
       },
     );
 
     if (alta) {
-      altaCreada = { id: alta.datos.usuario.id, email: CORREO_ALTA };
+      // El alta pendiente no devuelve id: se busca en el listado de Jefatura.
+      const listado = await (await pedir('/usuarios', { token: tokenAdmin })()).json();
+      const cuenta = listado?.datos?.usuarios?.find((u) => u.email === CORREO_ALTA);
+      altaCreada = { id: cuenta?.id, email: CORREO_ALTA };
 
       await comprobar(
-        'POST /auth/registro - el recien registrado ya puede entrar',
+        'POST /auth/registro - el pendiente NO puede entrar',
         pedir('/auth/login', { metodo: 'POST', cuerpo: { email: CORREO_ALTA, password: CLAVE_ALTA } }),
-        (c) => c.exito && c.datos.usuario.rol === 'ANALISTA',
+        (c) => !c.exito,
+        { statusEsperado: 403 },
       );
 
       await comprobar(
@@ -252,6 +259,18 @@ async function main() {
         pedir('/auth/registro', { metodo: 'POST', cuerpo: cuerpoAlta }),
         (c) => c.error.codigo === 'EMAIL_DUPLICADO',
         { statusEsperado: 409 },
+      );
+
+      await comprobar(
+        'PATCH /usuarios/:id/aprobar - Jefatura aprueba la solicitud',
+        pedir(`/usuarios/${cuenta.id}/aprobar`, { metodo: 'PATCH', token: tokenAdmin }),
+        (c) => c.exito && c.datos.usuario.activo === true,
+      );
+
+      await comprobar(
+        'POST /auth/login - tras la aprobacion, el analista entra',
+        pedir('/auth/login', { metodo: 'POST', cuerpo: { email: CORREO_ALTA, password: CLAVE_ALTA } }),
+        (c) => c.exito && c.datos.usuario.rol === 'ANALISTA',
       );
     }
   }
@@ -493,10 +512,21 @@ async function main() {
   console.log('\n8. CATALOGO DE PUERTOS');
 
   const catalogos = await comprobar(
-    'GET /puertos -> origen y destino separados',
+    'GET /puertos -> origen y destino separados (incluye Chile -> Callao)',
     pedir('/puertos', { token: tokenAdmin }),
-    (c) => c.datos.origen.length > 0 && c.datos.destino.length > 0 && c.parametros.limiteToneladasPorContenedor === 25,
-    { mostrar: (c) => `${c.datos.origen.length} origen / ${c.datos.destino.length} destino, limite ${c.parametros.limiteToneladasPorContenedor} tn` },
+    (c) =>
+      c.datos.origen.length > 0 &&
+      c.datos.destino.length > 0 &&
+      c.parametros.limiteToneladasPorContenedor === 25 &&
+      c.parametros.capacidadesPorTipo?.['20'] === 23 &&
+      c.parametros.capacidadesPorTipo?.['40'] === 25 &&
+      c.datos.origen.some((p) => p.codigo === 'CLSAI') &&
+      c.datos.destino.some((p) => p.codigo === 'PECLL'),
+    {
+      mostrar: (c) =>
+        `${c.datos.origen.length} origen / ${c.datos.destino.length} destino, ` +
+        `20 pies ${c.parametros.capacidadesPorTipo?.['20']} tn, 40 pies ${c.parametros.capacidadesPorTipo?.['40']} tn`,
+    },
   );
 
   await comprobar(
@@ -516,10 +546,10 @@ async function main() {
   const SHA = porCodigo.CNSHA;
   const VAP = porCodigo.CLVAP;
   const SAI = porCodigo.CLSAI;
-  const RTM = porCodigo.NLRTM;
+  const PECLL = porCodigo.PECLL;
 
   // ---------------- 4. Motor de calculo ----------------
-  console.log('\n9. MOTOR DE CALCULO (limite de 25 tn por contenedor)');
+  console.log('\n9. MOTOR DE CALCULO (20 pies: 23 tn | 40 pies: 25 tn)');
 
   const casos = [
     { nombre: '24.000 kg = 24 tn -> 1 contenedor', peso: 24_000, cont: 1 },
@@ -551,9 +581,16 @@ async function main() {
 
     // Verificacion aritmetica independiente del backend.
     if (resultado) {
-      const e = esperado(resultado.datos.toneladas, 25, resultado.datos.precio_contenedor_usd, 88_000);
+      const e = esperado(
+        resultado.datos.toneladas,
+        resultado.datos.capacidad_max_tn,
+        resultado.datos.precio_contenedor_usd,
+        88_000,
+      );
       const coincide =
         resultado.datos.costo_flete_usd === e.flete &&
+        resultado.datos.seguro_usd === e.seguro &&
+        resultado.datos.valor_cif_usd === e.cif &&
         resultado.datos.impuesto_19_cif_usd === e.impuesto &&
         resultado.datos.costo_total_usd === e.total;
 
@@ -562,16 +599,124 @@ async function main() {
         fallos += 1;
         console.log(
           ` [FALLA]   Desglose financiero de ${caso.peso} kg no coincide.\n` +
-          `          Backend: flete=${resultado.datos.costo_flete_usd} impuesto=${resultado.datos.impuesto_19_cif_usd} total=${resultado.datos.costo_total_usd}\n` +
-          `          Manual:   flete=${e.flete} impuesto=${e.impuesto} total=${e.total}`,
+          `          Backend: flete=${resultado.datos.costo_flete_usd} seguro=${resultado.datos.seguro_usd} cif=${resultado.datos.valor_cif_usd} impuesto=${resultado.datos.impuesto_19_cif_usd} total=${resultado.datos.costo_total_usd}\n` +
+          `          Manual:   flete=${e.flete} seguro=${e.seguro} cif=${e.cif} impuesto=${e.impuesto} total=${e.total}`,
         );
       } else {
         console.log(
-          `          Desglose correcto: merc 88000 + flete ${e.flete} + seguro ${e.total && 880} -> CIF -> 19% = ${e.impuesto} | total ${e.total}`,
+          `          Desglose correcto: merc 88000 + flete ${e.flete} + seguro ${e.seguro} -> CIF ${e.cif} -> 19% = ${e.impuesto} | total ${e.total}`,
         );
       }
     }
   }
+
+  await comprobar(
+    'Valor de la carga omitido -> total = flete (valor opcional)',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 10_000,
+        puerto_origen_id: SHA,
+        puerto_destino_id: VAP,
+        dias_contingencia: 0,
+      },
+    }),
+    (c) =>
+      c.datos.valor_mercaderia_usd === null &&
+      c.datos.tiene_valor_carga === false &&
+      c.datos.seguro_usd === 0 &&
+      c.datos.impuesto_19_cif_usd === 0 &&
+      c.datos.costo_total_usd === c.datos.costo_flete_usd,
+    { statusEsperado: 201, mostrar: (c) => `flete=${c.datos.costo_flete_usd}, total=${c.datos.costo_total_usd}` },
+  );
+
+  await comprobar(
+    'Ruta San Antonio -> Callao en 20 pies: 900 USD, 23 tn y 5 dias',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 21_000,
+        valor_mercaderia_usd: 70_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        tipo_contenedor: '20',
+        dias_contingencia: 0,
+      },
+    }),
+    (c) =>
+      c.datos.puerto_destino.codigo === 'PECLL' &&
+      c.datos.tipo_contenedor === '20' &&
+      c.datos.cantidad_contenedores === 1 &&
+      c.datos.capacidad_max_tn === 23 &&
+      c.datos.costo_flete_usd === 900 &&
+      c.datos.dias_viaje_base === 5,
+    {
+      statusEsperado: 201,
+      mostrar: (c) =>
+        `${c.datos.puerto_origen.codigo} -> ${c.datos.puerto_destino.codigo}, ` +
+        `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.dias_transito} dias`,
+    },
+  );
+
+  await comprobar(
+    'Ruta Valparaiso -> Callao en 40 pies: 970 USD, 25 tn y 5 dias',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 22_000,
+        valor_mercaderia_usd: 80_000,
+        puerto_origen_id: VAP,
+        puerto_destino_id: PECLL,
+        tipo_contenedor: '40HC',
+        dias_contingencia: 0,
+      },
+    }),
+    (c) =>
+      c.datos.puerto_destino.codigo === 'PECLL' &&
+      c.datos.tipo_contenedor === '40' &&
+      c.datos.cantidad_contenedores === 1 &&
+      c.datos.capacidad_max_tn === 25 &&
+      c.datos.costo_flete_usd === 970 &&
+      c.datos.dias_viaje_base === 5,
+    { statusEsperado: 201, mostrar: (c) => `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.costo_flete_usd} USD` },
+  );
+
+  await comprobar(
+    '20 pies respeta 23 tn: 24.000 kg -> 2 contenedores',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 24_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        tipo_contenedor: '20',
+        dias_contingencia: 0,
+      },
+    }),
+    (c) => c.datos.capacidad_max_tn === 23 && c.datos.cantidad_contenedores === 2,
+    { statusEsperado: 201, mostrar: (c) => `${c.datos.toneladas} tn -> ${c.datos.cantidad_contenedores} contenedores` },
+  );
+
+  await comprobar(
+    'Ruta sin tarifa (China -> Callao) -> 409',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 1_000,
+        valor_mercaderia_usd: 5_000,
+        puerto_origen_id: SHA,
+        puerto_destino_id: PECLL,
+        tipo_contenedor: '20',
+      },
+    }),
+    (c) => c.error.codigo === 'RUTA_SIN_TARIFA',
+    { statusEsperado: 409 },
+  );
 
   await comprobar(
     'Dias de contingencia suman al tiempo de transito',
@@ -610,11 +755,11 @@ async function main() {
     { nombre: 'peso AUSENTE', campos: { valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: VAP } },
     { nombre: 'peso no numerico', campos: { peso_kg: 'mucho', valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: VAP } },
     { nombre: 'peso absurdamente alto', campos: { peso_kg: 999_999_999, valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: VAP } },
-    { nombre: 'valor mercaderia vacio', campos: { peso_kg: 1_000, valor_mercaderia_usd: '', puerto_origen_id: SHA, puerto_destino_id: VAP } },
+    { nombre: 'valor mercaderia CERO (si se informa)', campos: { peso_kg: 1_000, valor_mercaderia_usd: 0, puerto_origen_id: SHA, puerto_destino_id: VAP } },
+    { nombre: 'valor mercaderia NEGATIVO', campos: { peso_kg: 1_000, valor_mercaderia_usd: -5_000, puerto_origen_id: SHA, puerto_destino_id: VAP } },
+    { nombre: 'valor mercaderia no numerico', campos: { peso_kg: 1_000, valor_mercaderia_usd: 'mucho', puerto_origen_id: SHA, puerto_destino_id: VAP } },
     { nombre: 'puerto origen inexistente', campos: { peso_kg: 1_000, valor_mercaderia_usd: 88_000, puerto_origen_id: 999_999, puerto_destino_id: VAP } },
     { nombre: 'origen = destino', campos: { peso_kg: 1_000, valor_mercaderia_usd: 88_000, puerto_origen_id: VAP, puerto_destino_id: VAP } },
-    { nombre: 'origen chileno (invertida)', campos: { peso_kg: 1_000, valor_mercaderia_usd: 88_000, puerto_origen_id: VAP, puerto_destino_id: SAI } },
-    { nombre: 'destino no chileno', campos: { peso_kg: 1_000, valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: RTM } },
     { nombre: 'dias de contingencia negativo', campos: { peso_kg: 1_000, valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: VAP, dias_contingencia: -5 } },
     { nombre: 'dias de contingencia exagerado', campos: { peso_kg: 1_000, valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: VAP, dias_contingencia: 999 } },
     { nombre: 'campo inesperado (inyeccion de params)', campos: { peso_kg: 1_000, valor_mercaderia_usd: 88_000, puerto_origen_id: SHA, puerto_destino_id: VAP, rol: 'ADMIN_COMEX' } },

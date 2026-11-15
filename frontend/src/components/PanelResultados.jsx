@@ -15,10 +15,10 @@ import { formatearUSD, formatearPeso, formatearToneladas, formatearEntero, clase
  * Dibuja un contenedor por cada unidad requerida.
  *
  * El relleno vertical de la ultima caja representa la ocupacion real, que
- * es donde se ve el efecto del limite de 25 tn: una carga de 26 tn llena un
- * contenedor y deja el siguiente casi vacio.
+ * es donde se ve el efecto del limite de carga: una carga de 26 tn llena un
+ * contenedor de 25 tn y deja el siguiente casi vacio.
  */
-function VisualizadorContenedores({ cantidad, ocupacionPct, tipo }) {
+function VisualizadorContenedores({ cantidad, ocupacionPct, tipo, capacidad }) {
   // Por encima de 40 cajas el bloque deja de ser legible: se resumen.
   const MAX_VISIBLES = 40;
   const excedente = cantidad > MAX_VISIBLES;
@@ -48,7 +48,7 @@ function VisualizadorContenedores({ cantidad, ocupacionPct, tipo }) {
       </div>
 
       <p style={{ marginTop: '0.5rem', fontSize: 'var(--texto-xs)', color: 'var(--gris-claro)' }}>
-        {cantidad} contenedor(es) {tipo} · limite legal aplicado: 25 tn por unidad.
+        {cantidad} contenedor(es) {tipo} · capacidad aplicada: {capacidad} tn por unidad.
         {visibles > 0 && ` Ultimo contenedor al ${Math.min(Math.max(ocupacionPct, 0), 100).toFixed(1)}% de ocupacion.`}
         {excedente && ` Se muestran los primeros ${MAX_VISIBLES}.`}
       </p>
@@ -102,6 +102,7 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
     toneladas,
     cantidad_contenedores: contenedores,
     tipo_contenedor: tipoContenedor,
+    capacidad_max_tn: capacidadMax,
     ocupacion_ultimo_contenedor_pct: ocupacion,
     puerto_origen: origen,
     puerto_destino: destino,
@@ -118,6 +119,9 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
     cotizacion_id: cotizacionId,
     parametros,
   } = resultado;
+
+  // El valor de la carga puede no haber sido informado.
+  const tieneValorCarga = valorMercaderia !== null && valorMercaderia !== undefined;
 
   return (
     <section className="tarjeta">
@@ -142,9 +146,9 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
           <div className="ruta__flecha" aria-hidden="true">→</div>
 
           <div className="ruta__nodo">
-            <Insignia variante="chile">{destino.codigo}</Insignia>
+            <Insignia variante={claseRegion(destino.region).replace('insignia--', '')}>{destino.codigo}</Insignia>
             <span className="ruta__nombre" style={{ marginTop: '0.3rem' }}>{destino.nombre}</span>
-            <span className="ruta__pais">Chile</span>
+            <span className="ruta__pais">{destino.pais}</span>
           </div>
         </div>
 
@@ -171,13 +175,13 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
           <Stat
             etiqueta="Impuesto 19% CIF"
             valor={formatearUSD(impuesto)}
-            detalle="Sobre valor CIF"
+            detalle={tieneValorCarga ? 'Informativo, no se suma' : 'Sin valor de carga informado'}
             variante="advertencia"
           />
           <Stat
             etiqueta="Costo total"
             valor={formatearUSD(costoTotal)}
-            detalle="Flete + impuesto"
+            detalle={tieneValorCarga ? 'Flete + valor de la carga' : 'Solo flete'}
             variante="exito"
           />
           <Stat
@@ -197,6 +201,7 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
             cantidad={contenedores}
             ocupacionPct={ocupacion ?? 0}
             tipo={tipoContenedor}
+            capacidad={capacidadMax ?? parametros?.limite_toneladas_por_contenedor ?? 25}
           />
         </div>
 
@@ -207,8 +212,13 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
 
         <div className="desglose">
           <div className="desglose__fila">
-            <span className="desglose__etiqueta">Valor de la mercaderia (FOB)</span>
-            <span className="desglose__valor">{formatearUSD(valorMercaderia)}</span>
+            <span className="desglose__etiqueta">
+              Valor de la mercaderia (FOB)
+              {!tieneValorCarga && <span className="desglose__sub">No informado</span>}
+            </span>
+            <span className="desglose__valor">
+              {tieneValorCarga ? formatearUSD(valorMercaderia) : 'No informado'}
+            </span>
           </div>
 
           <div className="desglose__fila">
@@ -222,7 +232,11 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
           <div className="desglose__fila">
             <span className="desglose__etiqueta">
               Seguro de carga
-              <span className="desglose__sub">1,0% sobre el valor de la mercaderia</span>
+              <span className="desglose__sub">
+                {tieneValorCarga
+                  ? '1,0% sobre el valor de la mercaderia'
+                  : 'No aplica sin valor de carga informado'}
+              </span>
             </span>
             <span className="desglose__valor">{formatearUSD(seguro)}</span>
           </div>
@@ -230,7 +244,9 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
           <div className="desglose__fila desglose__fila--destacada">
             <span className="desglose__etiqueta">
               Valor CIF (base imponible)
-              <span className="desglose__sub">Mercaderia + flete + seguro</span>
+              <span className="desglose__sub">
+                {tieneValorCarga ? 'Mercaderia + flete + seguro' : 'No aplica sin valor de carga informado'}
+              </span>
             </span>
             <span className="desglose__valor">{formatearUSD(valorCif)}</span>
           </div>
@@ -238,13 +254,22 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
           <div className="desglose__fila">
             <span className="desglose__etiqueta">
               Impuesto ad valorem 19%
-              <span className="desglose__sub">19% sobre {formatearUSD(valorCif)}</span>
+              <span className="desglose__sub">
+                {tieneValorCarga
+                  ? `19% sobre ${formatearUSD(valorCif)} (informativo)`
+                  : 'No aplica sin valor de carga informado'}
+              </span>
             </span>
             <span className="desglose__valor" style={{ color: 'var(--naranjo)' }}>{formatearUSD(impuesto)}</span>
           </div>
 
           <div className="desglose__fila desglose__fila--total">
-            <span className="desglose__etiqueta">Costo total de la importacion</span>
+            <span className="desglose__etiqueta">
+              Costo total de la importacion
+              <span className="desglose__sub">
+                {tieneValorCarga ? 'Flete + valor de la carga' : 'Solo flete'}
+              </span>
+            </span>
             <span className="desglose__valor">{formatearUSD(costoTotal)}</span>
           </div>
         </div>
@@ -276,12 +301,24 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
             }}
           >
             toneladas = {formatearPeso(pesoKg)} kg / 1000 = {formatearToneladas(toneladas)} tn<br />
-            contenedores = ceil({formatearToneladas(toneladas)} / {parametros?.limite_toneladas_por_contenedor}) = {contenedores}<br />
+            contenedores = ceil({formatearToneladas(toneladas)} / {capacidadMax ?? parametros?.limite_toneladas_por_contenedor ?? 25}) = {contenedores}<br />
             flete = {contenedores} × {formatearUSD(precioContenedor)} = {formatearUSD(costoFlete)}<br />
-            seguro = {formatearUSD(valorMercaderia)} × {(parametros?.tasa_seguro * 100).toFixed(1)}% = {formatearUSD(seguro)}<br />
-            CIF = {formatearUSD(valorMercaderia)} + {formatearUSD(costoFlete)} + {formatearUSD(seguro)} = {formatearUSD(valorCif)}<br />
-            impuesto = {formatearUSD(valorCif)} × {((parametros?.tasa_impuesto_cif ?? 0.19) * 100).toFixed(0)}% = {formatearUSD(impuesto)}<br />
-            total = {formatearUSD(costoFlete)} + {formatearUSD(impuesto)} = {formatearUSD(costoTotal)}<br />
+            {tieneValorCarga ? (
+              <>
+                seguro = {formatearUSD(valorMercaderia)} × {(parametros?.tasa_seguro * 100).toFixed(1)}% = {formatearUSD(seguro)}<br />
+                CIF = {formatearUSD(valorMercaderia)} + {formatearUSD(costoFlete)} + {formatearUSD(seguro)} = {formatearUSD(valorCif)}<br />
+                impuesto = {formatearUSD(valorCif)} × {((parametros?.tasa_impuesto_cif ?? 0.19) * 100).toFixed(0)}% = {formatearUSD(impuesto)} (informativo)<br />
+                total = {formatearUSD(costoFlete)} + {formatearUSD(valorMercaderia)} = {formatearUSD(costoTotal)}<br />
+              </>
+            ) : (
+              <>
+                valor de la carga = no informado<br />
+                seguro = 0 (sin valor de carga)<br />
+                CIF = no aplica<br />
+                impuesto = 0 (sin valor de carga)<br />
+                total = {formatearUSD(costoFlete)} + 0 = {formatearUSD(costoTotal)}<br />
+              </>
+            )}
             transito = {diasBase} + {diasContingencia} = {diasTransito} dias
           </div>
         </details>

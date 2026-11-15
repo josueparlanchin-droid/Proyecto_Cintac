@@ -127,15 +127,20 @@ de verdad: la UI y la prueba de API usan el mismo servicio.
 1. **Toneladas:** `tn = peso_kg / 1000`
 2. **Contenedores:** `ceil(tn / capacidad_max_tn)` con mínimo 1
 3. **Flete:** `contenedores × precio_usd` de la tarifa de la ruta
-4. **Seguro:** `valor_mercaderia_usd × 0.01`
-5. **CIF:** `mercancía + flete + seguro`
-6. **Impuesto (IVA 19%):** `CIF × 0.19`
-7. **Total:** `flete + impuesto`
+4. **Seguro:** `valor_mercaderia_usd × 0.01` (0 si no se informa el valor)
+5. **CIF:** `mercancía + flete + seguro` (0 si no se informa el valor)
+6. **Impuesto (IVA 19%):** `CIF × 0.19` (informativo: no se suma al total)
+7. **Total:** `flete + valor_mercaderia_usd`; si no se informa el valor, **solo el flete**
 8. **Tránsito:** `días base de la tarifa + días de contingencia`
 
-Un contenedor de 40 pies equivale a **25 tn** en el cálculo; el de 20 pies, a
-**20 tn**. La interfaz muestra la cantidad de tn y los contenedores necesarios
-en vivo, mientras el usuario escribe.
+El valor de la carga es **opcional**: el cotizador solo exige origen, destino y
+peso. Un contenedor de 40 pies equivale a **25 tn** en el cálculo; el de 20 pies,
+a **23 tn** (capacidades confirmadas por el cliente). La interfaz muestra la
+cantidad de tn y los contenedores necesarios en vivo, mientras el usuario escribe.
+
+Las tarifas incluyen las rutas directas **San Antonio → Callao** y
+**Valparaíso → Callao** (Perú), con 5 días de tránsito y precios de **900 USD**
+para 20 pies y **970 USD** para 40 pies.
 
 ## Estructura del proyecto
 
@@ -207,8 +212,9 @@ Quien llega a la aplicación sin cuenta usa **/registro** y necesita
   con `===` devuelve `false` en el primer carácter que difiere, así que el
   tiempo de respuesta revelaría cuántos caracteres correctos lleva el atacante.
 - La contraseña exige 8 a 128 caracteres, mayúscula, minúscula, número y
-  carácter especial, sin repetir tres caracteres seguidos ni contener espacios.
-- Quien se registra entra con sesión de inmediato: la respuesta trae el token.
+  carácter especial, sin espacios.
+- Quien se registra queda **pendiente de aprobación**: la respuesta no trae token
+  y el login se bloquea hasta que Jefatura Comex aprueba la solicitud.
 
 ### Administración de cuentas (Jefatura Comex)
 
@@ -287,12 +293,13 @@ npm run verificar:api    # solo la API
 ```
 
 - `frontend/scripts/verificar-frontend.js` maneja Chrome Headless por el
-  protocolo DevTools y comprueba 31 casos reales de interfaz: montaje, login,
+  protocolo DevTools y comprueba 60 casos reales de interfaz: montaje, login,
   conversión kg→tn en vivo, cálculo, PDF, historial, permisos del Analista,
   persistencia de sesión y ausencia de errores en consola.
 - `backend/scripts/verificar-api.js` recorre los endpoints de extremo a extremo y
-  comprueba 72 casos, incluidos los límites de 25 tn, el aislamiento por rol y
-  el rate limiting.
+  comprueba 109 casos, incluidos los límites de 23 tn (20 pies) y 25 tn
+  (40 pies), las rutas Chile → Callao, el registro pendiente de aprobación,
+  el aislamiento por rol y el rate limiting.
 
 > El orden importa: la prueba de la API es la última a propósito, porque agota
 > el cupo de 20 intentos de login para comprobar el bloqueo. Si la ejecutas por

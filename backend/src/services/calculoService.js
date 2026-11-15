@@ -8,14 +8,20 @@
  *   toneladas   = peso_kg / 1000
  *   contenedores= ceil(toneladas / capacidad_max_tn)      [minimo 1]
  *   flete       = contenedores x precio_usd_del_contenedor
- *   seguro      = valor_mercaderia_usd x 1%
+ *   seguro      = valor_mercaderia_usd x 1%               [0 si no se informa]
  *   CIF         = valor_mercaderia_usd + flete + seguro
- *   impuesto    = CIF x 19%
- *   costo_total = flete + impuesto
+ *   impuesto    = CIF x 19%                               [informativo]
+ *   costo_total = flete + valor_mercaderia_usd            [solo flete si no hay valor]
  *   transito    = dias_viaje_base + dias_contingencia
  *
- * El limite de 25 tn NO esta escrito aqui: se lee de la tarifa de la ruta
- * (columna capacidad_max_tn), con 25 tn como valor de respaldo.
+ * El valor de la carga es OPCIONAL: si el usuario no lo conoce, el total es
+ * el flete puro y el desglose de seguro, CIF e impuesto queda en cero. El
+ * impuesto es informativo y NO se suma al total: el total que se cotiza es
+ * flete + valor de la carga.
+ *
+ * La capacidad NO esta escrita aqui: se lee de la tarifa de la ruta
+ * (columna capacidad_max_tn), con 23 tn para 20 pies y 25 tn para 40 pies
+ * como valores de respaldo.
  */
 
 import * as tarifaModel from '../models/tarifaModel.js';
@@ -62,7 +68,7 @@ export function calcularContenedores(toneladas, capacidadMaxTn) {
  *
  * @param {object} entrada - Ya validada por Zod en el middleware.
  * @param {number} entrada.peso_kg
- * @param {number} entrada.valor_mercaderia_usd
+ * @param {number} [entrada.valor_mercaderia_usd] - Opcional; si falta, el total es solo el flete.
  * @param {number} entrada.puerto_origen_id
  * @param {number} entrada.puerto_destino_id
  * @param {number} [entrada.dias_contingencia]
@@ -74,7 +80,7 @@ export function calcularContenedores(toneladas, capacidadMaxTn) {
 export async function simular(entrada) {
   const {
     peso_kg: pesoKg,
-    valor_mercaderia_usd: valorMercaderiaUsd,
+    valor_mercaderia_usd: valorMercaderiaEntrada = null,
     puerto_origen_id: puertoOrigenId,
     puerto_destino_id: puertoDestinoId,
     dias_contingencia: diasContingencia = 0,
@@ -83,19 +89,22 @@ export async function simular(entrada) {
     guardar = false,
   } = entrada;
 
-  // --- 1. Validar que los puertos existan y tengan el rol correcto ---
+  // El valor de la carga es opcional: se normaliza a null cuando no viene.
+  const valorMercaderiaUsd =
+    valorMercaderiaEntrada === null || valorMercaderiaEntrada === undefined
+      ? null
+      : Number(valorMercaderiaEntrada);
+  const hayValorCarga = valorMercaderiaUsd !== null && valorMercaderiaUsd > 0;
+
+  // --- 1. Validar que los puertos existan ---
   const origen = await puertoModel.buscarPorId(puertoOrigenId);
   const destino = await puertoModel.buscarPorId(puertoDestinoId);
 
   if (!origen) throw ApiError.badRequest('El puerto de origen seleccionado no existe.', { codigo: 'PUERTO_ORIGEN_INVALIDO' });
   if (!destino) throw ApiError.badRequest('El puerto de destino seleccionado no existe.', { codigo: 'PUERTO_DESTINO_INVALIDO' });
 
-  if (origen.region === 'CHILE') {
-    throw ApiError.badRequest('El puerto de origen no puede ser un puerto chileno.', { codigo: 'ORIGEN_INVALIDO' });
-  }
-  if (destino.region !== 'CHILE') {
-    throw ApiError.badRequest('El puerto de destino debe ser un puerto de Chile.', { codigo: 'DESTINO_INVALIDO' });
-  }
+  // La validez de la ruta la define la existencia de una tarifa, no la region
+  // del puerto: hay rutas Chile -> Peru y China/Europa/America -> Chile.
   if (origen.id === destino.id) {
     throw ApiError.badRequest('El puerto de origen y destino no pueden ser iguales.', { codigo: 'RUTA_INVALIDA' });
   }
@@ -104,9 +113,10 @@ export async function simular(entrada) {
   const tarifa = await tarifaModel.buscarRuta(origen.id, destino.id, tipoContenedorSolicitado);
 
   if (!tarifa) {
+    const etiquetaTipo = tipoContenedorSolicitado === '20' ? '20 pies' : '40 pies';
     throw ApiError.conflicto(
-      `No existe tarifa vigente para la ruta ${origen.nombre} (${origen.pais_origen}) -> ${destino.nombre} (${destino.pais_origen}). ` +
-        'Cargue la planilla de tarifas correspondiente.',
+      `No existe tarifa vigente para ${etiquetaTipo} en la ruta ${origen.nombre} (${origen.pais_origen}) -> ` +
+        `${destino.nombre} (${destino.pais_origen}). Cargue la planilla de tarifas correspondiente.`,
       { codigo: 'RUTA_SIN_TARIFA' },
     );
   }
@@ -120,10 +130,16 @@ export async function simular(entrada) {
 
   // --- 4. Desglose financiero ---
   const costoFleteUsd = redondearMoneda(cantidadContenedores * tarifa.precio_usd);
-  const seguroUsd = redondearMoneda(valorMercaderiaUsd * TASA_SEGURO);
-  const valorCifUsd = redondearMoneda(valorMercaderiaUsd + costoFleteUsd + seguroUsd);
-  const impuesto19CifUsd = redondearMoneda(valorCifUsd * TASA_IMPUESTO_CIF);
-  const costoTotalUsd = redondearMoneda(costoFleteUsd + impuesto19CifUsd);
+  const valorAseguradoUsd = hayValorCarga ? valorMercaderiaUsd : 0;
+  const seguroUsd = hayValorCarga ? redondearMoneda(valorAseguradoUsd * TASA_SEGURO) : 0;
+  const valorCifUsd = hayValorCarga
+    ? redondearMoneda(valorAseguradoUsd + costoFleteUsd + seguroUsd)
+    : 0;
+  const impuesto19CifUsd = hayValorCarga ? redondearMoneda(valorCifUsd * TASA_IMPUESTO_CIF) : 0;
+
+  // El total cotizado es flete + valor de la carga. El impuesto es solo
+  // informativo: se muestra en el desglose pero no se suma.
+  const costoTotalUsd = redondearMoneda(costoFleteUsd + valorAseguradoUsd);
 
   // --- 5. Dias de transito ---
   const diasTransito = tarifa.dias_viaje_base + diasContingencia;
@@ -152,12 +168,14 @@ export async function simular(entrada) {
       id: destino.id,
       nombre: destino.nombre,
       pais: destino.pais_origen,
+      region: destino.region,
       codigo: destino.codigo,
     },
-    ruta: `${origen.nombre}, ${origen.pais_origen} -> ${destino.nombre}, Chile`,
+    ruta: `${origen.nombre}, ${origen.pais_origen} -> ${destino.nombre}, ${destino.pais_origen}`,
 
     // --- Desglose financiero ---
-    valor_mercaderia_usd: redondearMoneda(valorMercaderiaUsd),
+    valor_mercaderia_usd: hayValorCarga ? redondearMoneda(valorMercaderiaUsd) : null,
+    tiene_valor_carga: hayValorCarga,
     precio_contenedor_usd: tarifa.precio_usd,
     costo_flete_usd: costoFleteUsd,
     seguro_usd: seguroUsd,
@@ -191,7 +209,7 @@ export async function simular(entrada) {
       puerto_destino_id: destino.id,
       tipo_contenedor: tipoContenedor,
       dias_viaje_base: tarifa.dias_viaje_base,
-      valor_mercaderia_usd: redondearMoneda(valorMercaderiaUsd),
+      valor_mercaderia_usd: hayValorCarga ? redondearMoneda(valorMercaderiaUsd) : null,
       capacidad_max_tn: capacidadMaxTn,
       precio_contenedor_usd: tarifa.precio_usd,
       dias_contingencia: diasContingencia,

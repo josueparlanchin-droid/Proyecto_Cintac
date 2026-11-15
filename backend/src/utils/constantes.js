@@ -16,9 +16,24 @@ export const TASA_IMPUESTO_CIF = 0.19;
 export const TASA_SEGURO = 0.01;
 
 /**
- * Limite de carga por contenedor. Es el valor por defecto de la columna
- * `tarifas_flete.capacidad_max_tn`, por lo que el dato real usado siempre
- * se lee de la base y este valor solo actua como respaldo.
+ * Capacidad maxima por tipo de contenedor, confirmada por el cliente:
+ *   - 20 pies: 23 toneladas
+ *   - 40 pies (incluye 40HC y 40RF): 25 toneladas
+ *
+ * El calculo real usa la columna `tarifas_flete.capacidad_max_tn`; este mapa
+ * es el respaldo y la referencia que se muestra en la interfaz.
+ */
+export const CAPACIDAD_POR_TIPO = Object.freeze({
+  '20': 23,
+  '40': 25,
+  '40HC': 25,
+  '40RF': 25,
+});
+
+/**
+ * Limite de carga por contenedor de 40 pies. Es el valor por defecto de la
+ * columna `tarifas_flete.capacidad_max_tn`, por lo que el dato real usado
+ * siempre se lee de la base y este valor solo actua como respaldo.
  */
 export const MAX_TONELADAS_POR_CONTENEDOR = 25;
 
@@ -45,7 +60,7 @@ export const PESO_MAXIMO_KG = 30_000_000; // 30.000 tn
 /** Rango admitido de dias de contingencia. */
 export const DIAS_CONTINGENCIA_MAX = 90;
 
-/** Divisor deConversion de toneladas a kilogramos. */
+/** Divisor de conversion de toneladas a kilogramos. */
 export const KG_POR_TONELADA = 1000;
 
 /**

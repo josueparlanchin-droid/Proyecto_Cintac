@@ -24,6 +24,8 @@ const SELECT_BASE = `
          po.region   AS puerto_origen_region,
          po.codigo   AS puerto_origen_codigo,
          pd.nombre AS puerto_destino,
+         pd.pais_origen AS puerto_destino_pais,
+         pd.region   AS puerto_destino_region,
          pd.codigo   AS puerto_destino_codigo
   FROM cotizaciones_log c
   JOIN puertos po ON po.id = c.puerto_origen_id
@@ -179,6 +181,8 @@ export async function buscarPorId(id) {
             po.region   AS puerto_origen_region,
             po.codigo   AS puerto_origen_codigo,
             pd.nombre AS puerto_destino,
+            pd.pais_origen AS puerto_destino_pais,
+            pd.region   AS puerto_destino_region,
             pd.codigo   AS puerto_destino_codigo,
             u.nombre AS usuario_nombre,
             u.email  AS usuario_email,

@@ -40,9 +40,10 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- por una expresion, por ejemplo LOWER(email). Ver README (PostgreSQL).
 
 -- ------------------------------------------------------------------
--- puertos: catalogo unico de origen internacional y destino en Chile.
---   region CHINA | EUROPA | AMERICA -> solo origen
---   region CHILE                    -> solo destino
+-- puertos: catalogo de puertos de origen y destino.
+--   La validez de una ruta la define la existencia de una tarifa en
+--   tarifas_flete, no la region del puerto: hay rutas Chile -> Peru
+--   ademas de las rutas China/Europa/America -> Chile.
 -- ------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS puertos (
   id           SERIAL PRIMARY KEY,
@@ -97,7 +98,7 @@ CREATE TABLE IF NOT EXISTS cotizaciones_log (
   dias_viaje_base          INTEGER      NOT NULL,
 
   -- Factores del calculo
-  valor_mercaderia_usd     NUMERIC(14,2) NOT NULL CHECK (valor_mercaderia_usd > 0),
+  valor_mercaderia_usd     NUMERIC(14,2) CHECK (valor_mercaderia_usd IS NULL OR valor_mercaderia_usd > 0),
   capacidad_max_tn         NUMERIC(6,2)  NOT NULL,
   precio_contenedor_usd    NUMERIC(12,2) NOT NULL,
   dias_contingencia        INTEGER      NOT NULL DEFAULT 0 CHECK (dias_contingencia >= 0),
@@ -146,3 +147,15 @@ CREATE TABLE IF NOT EXISTS usuarios_auditoria (
 
 CREATE INDEX IF NOT EXISTS idx_auditoria_objetivo ON usuarios_auditoria (usuario_objetivo_id);
 CREATE INDEX IF NOT EXISTS idx_auditoria_fecha    ON usuarios_auditoria (creado_en DESC);
+
+-- ------------------------------------------------------------------
+-- Migracion idempotente: el valor de la carga paso de obligatorio a
+-- opcional. CREATE TABLE IF NOT EXISTS no modifica una tabla ya creada,
+-- asi que estas sentencias se ejecutan en cada arranque para dejar la
+-- columna nullable y con el CHECK correcto en bases existentes.
+-- ------------------------------------------------------------------
+ALTER TABLE cotizaciones_log ALTER COLUMN valor_mercaderia_usd DROP NOT NULL;
+ALTER TABLE cotizaciones_log DROP CONSTRAINT IF EXISTS cotizaciones_log_valor_mercaderia_usd_check;
+ALTER TABLE cotizaciones_log
+  ADD CONSTRAINT cotizaciones_log_valor_mercaderia_usd_check
+  CHECK (valor_mercaderia_usd IS NULL OR valor_mercaderia_usd > 0);

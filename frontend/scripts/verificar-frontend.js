@@ -546,7 +546,7 @@ async function main() {
 
     comprobar('La vista de historial carga registros', /n\.\d+|#\d+/.test(textoHistorial));
     comprobar('Jefatura ve el aviso de vista completa', historial.includes('vista completa'));
-    comprobar('Jefuria dispone del boton Eliminar', historial.includes('eliminar'));
+    comprobar('Jefatura dispone del boton Eliminar', historial.includes('eliminar'));
     comprobar('El historial muestra la paginacion', /mostrando .* cotizaciones/.test(historial));
     comprobar('Las metricas agregadas se muestran', historial.includes('facturacion simulada'));
 

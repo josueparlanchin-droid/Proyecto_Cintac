@@ -243,7 +243,9 @@ Miami,Valparaiso,40HC,1450,9,25`}
                         </td>
 
                         <td>
-                          <Insignia variante="chile">{t.destino_codigo}</Insignia>
+                          <Insignia variante={claseRegion(t.destino_region).replace('insignia--', '')}>
+                            {t.destino_codigo}
+                          </Insignia>
                           <div style={{ fontSize: 'var(--texto-xs)', color: 'var(--gris-claro)' }}>
                             {t.destino_nombre}
                           </div>

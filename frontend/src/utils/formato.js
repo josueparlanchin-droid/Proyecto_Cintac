@@ -127,7 +127,7 @@ export const REGIONES = {
   CHINA: 'Asia - China',
   EUROPA: 'Europa',
   AMERICA: 'America',
-  CHILE: 'Chile (destino)',
+  CHILE: 'Chile',
 };
 
 /** Clase CSS de la insignia segun la region. */

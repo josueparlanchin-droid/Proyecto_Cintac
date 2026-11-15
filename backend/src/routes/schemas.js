@@ -22,6 +22,17 @@ const numeroPositivo = (etiqueta, maximo) =>
     .finite(`${etiqueta} debe ser un numero valido.`)
     .refine((n) => n <= maximo, `${etiqueta} no puede superar ${maximo}.`);
 
+/**
+ * Numero positivo opcional. Un campo enviado vacio ('' o null) se interpreta
+ * como "no informado" y no como cero: el valor de la carga es un dato que el
+ * usuario puede no conocer al momento de cotizar.
+ */
+const numeroPositivoOpcional = (etiqueta, maximo) =>
+  z.preprocess(
+    (valor) => (valor === '' || valor === null ? undefined : valor),
+    numeroPositivo(etiqueta, maximo).optional(),
+  );
+
 /** IDs de base de datos: enteros positivos. */
 const idPositivo = z.coerce
   .number({ message: 'Identificador invalido.' })
@@ -53,7 +64,7 @@ export const esquemaCalculo = z
   .object({
     peso_kg: numeroPositivo('El peso', PESO_MAXIMO_KG),
 
-    valor_mercaderia_usd: numeroPositivo('El valor de la mercaderia', 500_000_000),
+    valor_mercaderia_usd: numeroPositivoOpcional('El valor de la mercaderia', 500_000_000),
 
     puerto_origen_id: idPositivo,
     puerto_destino_id: idPositivo,

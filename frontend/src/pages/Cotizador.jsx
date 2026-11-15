@@ -23,8 +23,11 @@ import {
 } from '../utils/formato';
 import { generarInformePDF } from '../utils/pdf';
 
-/** Limite legal por contenedor. Solo para feedback visual; el backend usa el valor de la tarifa. */
-const LIMITE_TN = 25;
+/**
+ * Capacidad por tipo de contenedor. Solo para feedback visual; el backend
+ * usa el valor real de la tarifa (`capacidad_max_tn`).
+ */
+const CAPACIDAD_POR_TIPO = { '20': 23, '40': 25, '40HC': 25, '40RF': 25 };
 
 /**
  * Convierte a numero admitiendo coma o punto como separador decimal.
@@ -53,10 +56,11 @@ export default function Cotizador() {
 
   // --- Formulario ---
   const [pesoKg, setPesoKg] = useState('18000');
-  const [valorMercaderia, setValorMercaderia] = useState('65000');
+  const [valorMercaderia, setValorMercaderia] = useState('');
   const [origenId, setOrigenId] = useState('');
   const [destinoId, setDestinoId] = useState('');
-  const [contingencia, setContingencia] = useState(5);
+  const [tipoContenedor, setTipoContenedor] = useState('40HC');
+  const [contingencia, setContingencia] = useState(0);
   const [guardar, setGuardar] = useState(true);
 
   // --- Resultado / errores ---
@@ -79,9 +83,10 @@ export default function Cotizador() {
         setPuertos(datos);
 
         // Se preselecciona la primera ruta disponible (China -> Chile),
-        // que es el caso de uso mas frecuente en la operacion real.
+        // que es el caso de uso mas frecuente en la operacion real. El
+        // destino tambien puede ser Callao (Peru), por eso se busca Chile.
         const primerOrigen = datos.origenPorRegion?.CHINA?.[0] ?? datos.origen[0];
-        const primerDestino = datos.destino[0];
+        const primerDestino = datos.destino.find((p) => p.region === 'CHILE') ?? datos.destino[0];
 
         if (primerOrigen) setOrigenId(String(primerOrigen.id));
         if (primerDestino) setDestinoId(String(primerDestino.id));
@@ -101,6 +106,8 @@ export default function Cotizador() {
   // ==================================================================
   // Conversion en vivo kg -> tn (feedback inmediato, no es el resultado final)
   // ==================================================================
+  const capacidadTn = CAPACIDAD_POR_TIPO[tipoContenedor] ?? 25;
+
   const conversiones = useMemo(() => {
     const kg = aNumero(pesoKg);
 
@@ -109,26 +116,28 @@ export default function Cotizador() {
     }
 
     const toneladas = kg / 1000;
-    const contenedorEstimado = Math.max(Math.ceil(toneladas / LIMITE_TN), 1);
+    const contenedorEstimado = Math.max(Math.ceil(toneladas / capacidadTn), 1);
 
     // Porcentaje de ocupacion del ULTIMO contenedor: lo que ocupa
     // la carga mas alla de los contenedores completos.
-    const tonsEnUltimo = toneladas - (contenedorEstimado - 1) * LIMITE_TN;
+    const tonsEnUltimo = toneladas - (contenedorEstimado - 1) * capacidadTn;
 
     return {
       valido: true,
       toneladas,
       contenedorEstimado,
-      ocupacion: Math.min(Math.max((tonsEnUltimo / LIMITE_TN) * 100, 0), 100),
+      ocupacion: Math.min(Math.max((tonsEnUltimo / capacidadTn) * 100, 0), 100),
     };
-  }, [pesoKg]);
+  }, [pesoKg, capacidadTn]);
 
+  // El valor de la carga es opcional: vacio = no informado.
   const valorMercaderiaNumero = aNumero(valorMercaderia);
+  const valorInformado = Number.isFinite(valorMercaderiaNumero) && valorMercaderiaNumero > 0;
+  const valorInvalido = valorMercaderia.trim() !== '' && !valorInformado;
 
   const formularioValido =
     conversiones.valido &&
-    Number.isFinite(valorMercaderiaNumero) &&
-    valorMercaderiaNumero > 0 &&
+    !valorInvalido &&
     Boolean(origenId) &&
     Boolean(destinoId);
 
@@ -144,14 +153,18 @@ export default function Cotizador() {
     setCalculando(true);
 
     try {
-      const { datos } = await api.calcular({
+      const cuerpo = {
         peso_kg: aNumero(pesoKg),
-        valor_mercaderia_usd: aNumero(valorMercaderia),
         puerto_origen_id: Number(origenId),
         puerto_destino_id: Number(destinoId),
+        tipo_contenedor: tipoContenedor,
         dias_contingencia: Number(contingencia),
         guardar,
-      });
+      };
+
+      if (valorInformado) cuerpo.valor_mercaderia_usd = valorMercaderiaNumero;
+
+      const { datos } = await api.calcular(cuerpo);
 
       setResultado(datos);
 
@@ -191,8 +204,9 @@ export default function Cotizador() {
         <div>
           <h1 className="pagina__titulo">Cotizacion de Importacion</h1>
           <p className="pagina__descripcion">
-            Simule el costo y los plazos de una importacion. El limite legal de{' '}
-            <strong>{LIMITE_TN} toneladas</strong> por contenedor se aplica automaticamente.
+            Simule el costo y los plazos de una importacion. El sistema calcula los
+            contenedores segun el peso y la capacidad del tipo elegido:{' '}
+            <strong>20 pies = 23 tn</strong> y <strong>40 pies = 25 tn</strong>.
           </p>
         </div>
       </div>
@@ -251,16 +265,23 @@ export default function Cotizador() {
                     {formatearToneladas(conversiones.toneladas)} tn
                   </span>
                 </div>
+                <div className="campo__ayuda" style={{ marginTop: '0.35rem', textAlign: 'center' }}>
+                  {conversiones.contenedorEstimado} contenedor
+                  {conversiones.contenedorEstimado === 1 ? '' : 'es'} de {capacidadTn} tn
+                </div>
               </div>
             )}
 
-            {/* --- Valor de la mercancia (base del impuesto CIF) --- */}
+            {/* --- Valor de la mercancia (opcional) --- */}
             <Campo
-              etiqueta="Valor de la mercaderia (FOB)"
+              etiqueta="Valor de la mercaderia (FOB, opcional)"
               htmlFor="valor"
-              requerido
               sufijo="USD"
-              ayuda="Valor declarado de la carga sin flete. Forma parte de la base imponible del 19%."
+              ayuda={
+                valorInvalido
+                  ? 'Ingrese un monto mayor que cero o deje el campo vacio.'
+                  : 'Opcional. Si lo conoce, el total sera el flete mas este valor. Si lo deja vacio, el total sera solo el flete.'
+              }
             >
               <input
                 id="valor"
@@ -270,13 +291,13 @@ export default function Cotizador() {
                 className="control"
                 value={valorMercaderia}
                 onChange={(e) => setValorMercaderia(e.target.value)}
-                placeholder="Ej. 65.000"
+                placeholder="Ej. 65.000 (opcional)"
                 autoComplete="off"
               />
             </Campo>
 
             {/* --- Puerto de origen --- */}
-            <Campo etiqueta="Puerto de origen internacional" htmlFor="origen" requerido>
+            <Campo etiqueta="Puerto de origen" htmlFor="origen" requerido>
               <select
                 id="origen"
                 name="origen"
@@ -303,7 +324,7 @@ export default function Cotizador() {
             </Campo>
 
             {/* --- Puerto de destino --- */}
-            <Campo etiqueta="Puerto de destino en Chile" htmlFor="destino" requerido>
+            <Campo etiqueta="Puerto de destino" htmlFor="destino" requerido>
               <select
                 id="destino"
                 name="destino"
@@ -324,45 +345,79 @@ export default function Cotizador() {
               </select>
             </Campo>
 
-            {/* --- Dias de contingencia --- */}
-            <Campo
-              etiqueta="Dias de contingencia"
-              htmlFor="contingencia"
-              ayuda="Margen por imponderables: tifones, cierre de puertos, demoras en aduana."
-            >
-              <input
-                id="contingencia"
-                name="contingencia"
-                type="range"
-                min="0"
-                max="45"
-                step="1"
-                value={contingencia}
-                onChange={(e) => setContingencia(Number(e.target.value))}
-                className="deslizador"
-              />
-
-              <div className="deslizador-escala">
-                <span>0 dias</span>
-                <strong style={{ color: 'var(--terracota)' }}>+{contingencia} dias</strong>
-                <span>45 dias</span>
-              </div>
-            </Campo>
-
-            {/* --- Persistencia --- */}
-            <div className="campo">
-              <label
-                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: 'var(--texto-sm)' }}
+            {/* --- Opciones avanzadas: no son datos obligatorios del pedido --- */}
+            <details style={{ marginTop: 'var(--esp-2)' }}>
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: 'var(--texto-sm)',
+                  color: 'var(--terracota)',
+                }}
               >
-                <input
-                  type="checkbox"
-                  checked={guardar}
-                  onChange={(e) => setGuardar(e.target.checked)}
-                  style={{ width: '1.05rem', height: '1.05rem', accentColor: 'var(--terracota)', cursor: 'pointer' }}
-                />
-                Guardar esta simulacion en el historial
-              </label>
-            </div>
+                Opciones avanzadas
+              </summary>
+
+              <div style={{ marginTop: 'var(--esp-4)', display: 'grid', gap: 'var(--esp-5)' }}>
+                <Campo
+                  etiqueta="Tipo de contenedor"
+                  htmlFor="tipo"
+                  ayuda="El sistema ajusta la cantidad de contenedores a la capacidad elegida."
+                >
+                  <select
+                    id="tipo"
+                    name="tipo"
+                    className="control"
+                    value={tipoContenedor}
+                    onChange={(e) => {
+                      setTipoContenedor(e.target.value);
+                      setResultado(null);
+                    }}
+                  >
+                    <option value="40HC">40 pies (25 tn)</option>
+                    <option value="20">20 pies (23 tn)</option>
+                  </select>
+                </Campo>
+
+                <Campo
+                  etiqueta="Dias de contingencia"
+                  htmlFor="contingencia"
+                  ayuda="Margen por imponderables: tifones, cierre de puertos, demoras en aduana."
+                >
+                  <input
+                    id="contingencia"
+                    name="contingencia"
+                    type="range"
+                    min="0"
+                    max="45"
+                    step="1"
+                    value={contingencia}
+                    onChange={(e) => setContingencia(Number(e.target.value))}
+                    className="deslizador"
+                  />
+
+                  <div className="deslizador-escala">
+                    <span>0 dias</span>
+                    <strong style={{ color: 'var(--terracota)' }}>+{contingencia} dias</strong>
+                    <span>45 dias</span>
+                  </div>
+                </Campo>
+
+                <div className="campo">
+                  <label
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: 'var(--texto-sm)' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={guardar}
+                      onChange={(e) => setGuardar(e.target.checked)}
+                      style={{ width: '1.05rem', height: '1.05rem', accentColor: 'var(--terracota)', cursor: 'pointer' }}
+                    />
+                    Guardar esta simulacion en el historial
+                  </label>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div className="tarjeta__pie">
@@ -372,7 +427,7 @@ export default function Cotizador() {
 
             {!formularioValido && (
               <p className="campo__ayuda" style={{ textAlign: 'center', marginTop: 'var(--esp-2)' }}>
-                Complete el peso, el valor y ambos puertos para continuar.
+                Complete el peso y ambos puertos para continuar. El valor de la carga es opcional.
               </p>
             )}
           </div>

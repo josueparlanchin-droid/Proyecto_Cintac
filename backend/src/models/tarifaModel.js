@@ -21,8 +21,11 @@ import { queryOne, queryAll, query } from '../config/db.js';
  * Se puede resolver en una sola consulta con ORDER BY sobre un CASE que
  * ordena primero la coincidencia exacta y luego el '40' generico:
  *   - tipo pedido y tipo guardado coinciden  -> prioridad 1
- *   - tipo pedido 40HC y guardado es '40'    -> prioridad 2
+ *   - tipo pedido 40HC/40RF y guardado '40'  -> prioridad 2
  *   - cualquier otro caso                   -> no aparece
+ *
+ * El respaldo a '40' NO aplica a un pedido de 20 pies: usar la tarifa de
+ * un contenedor de 40 para cotizar uno de 20 seria un precio incorrecto.
  *
  * @param {number} puertoOrigenId
  * @param {number} puertoDestinoId
@@ -33,8 +36,11 @@ export async function buscarRuta(puertoOrigenId, puertoDestinoId, tipoContenedor
   return queryOne(
     `SELECT * FROM tarifas_flete
      WHERE puerto_origen_id = $1
-       AND puerto_destino_id = $2
-       AND tipo_contenedor IN ($3, '40')
+        AND puerto_destino_id = $2
+        AND (
+          tipo_contenedor = $3
+          OR ($3 IN ('40HC', '40RF') AND tipo_contenedor = '40')
+        )
      ORDER BY CASE WHEN tipo_contenedor = $3 THEN 1 ELSE 2 END
      LIMIT 1`,
     [puertoOrigenId, puertoDestinoId, tipoContenedor],
@@ -53,6 +59,7 @@ export async function listar() {
            po.codigo   AS origen_codigo,
            pd.nombre AS destino_nombre,
            pd.pais_origen AS destino_pais,
+           pd.region   AS destino_region,
            pd.codigo   AS destino_codigo
     FROM tarifas_flete t
     JOIN puertos po ON po.id = t.puerto_origen_id

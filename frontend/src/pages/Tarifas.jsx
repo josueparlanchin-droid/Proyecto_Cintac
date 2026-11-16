@@ -193,14 +193,15 @@ export default function Tarifas() {
                 }}
               >
 {`puerto_origen,puerto_destino,tipo_contenedor,precio_usd,dias_viaje_base,capacidad_max_tn
-Shanghai,Valparaiso,40HC,2450,32,25
-Rotterdam,San Antonio,40HC,1890,25,25
-Miami,Valparaiso,40HC,1450,9,25`}
+CNSHA,CLVAP,40HC,2450,32,25
+CLSAI,PECLL,20,900,5,23
+CLVAP,PECLL,40,970,5,25`}
               </pre>
 
               <p className="campo__ayuda" style={{ marginTop: 'var(--esp-2)' }}>
                 Los puertos pueden escribirse por nombre o por codigo UN/LOCODE (CNSHA, CLVAP...).
-                Si una ruta ya existe, su precio se actualiza en lugar de duplicarse.
+                El tipo debe ser 20, 40, 40HC o 40RF; sin capacidad se usan 23 tn para 20 pies
+                y 25 tn para 40 pies. Si una ruta ya existe, su precio se actualiza en lugar de duplicarse.
               </p>
             </div>
           </div>

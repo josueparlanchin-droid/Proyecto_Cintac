@@ -445,6 +445,18 @@ async function main() {
     console.log('\n5. CONVERSION kg -> tn EN VIVO');
     // ==================================================================
 
+    const tipoInicial = await evaluar(`document.getElementById('tipo')?.value ?? ''`);
+    comprobar('El tipo de contenedor inicia en automatico', tipoInicial === 'auto', `valor="${tipoInicial}"`);
+
+    const opcionesTipo = await evaluar(`
+      Array.from(document.getElementById('tipo')?.options ?? []).map(o => o.textContent.trim())
+    `);
+    comprobar(
+      'La opcion Automatico esta disponible en las opciones avanzadas',
+      Array.isArray(opcionesTipo) && opcionesTipo.some((texto) => /automatico/i.test(texto)),
+      `opciones=${JSON.stringify(opcionesTipo)}`,
+    );
+
     const conversionInicial = await llenar([['peso', '50000']]);
 
     await new Promise((r) => setTimeout(r, 700));
@@ -491,6 +503,10 @@ async function main() {
 
     comprobar('El panel muestra la ruta simulada', /cntao|cnsha|cnngb|clvap|clsai/.test(texto));
     comprobar('Se muestra la cantidad de contenedores calculada', texto.includes('contenedores'));
+    comprobar(
+      'El panel indica que el tipo fue elegido automaticamente',
+      texto.includes('elegido automaticamente'),
+    );
     comprobar('Se muestra el flete maritimo', texto.includes('flete maritimo'));
     comprobar('Se muestra el impuesto de 19% sobre CIF', texto.includes('impuesto 19% cif'));
     comprobar('Se muestra el tiempo de transito', texto.includes('tiempo de transito'));
@@ -570,10 +586,21 @@ async function main() {
     await new Promise((r) => setTimeout(r, 3000));
 
     const textoAnalista = (await evaluar(`document.body.innerText`)) ?? '';
+    const enlacesAnalista = (await evaluar(`
+      Array.from(document.querySelectorAll('.barra__navegacion a')).map(a => a.textContent.trim())
+    `)) ?? [];
     comprobar('El Analista accede a la aplicacion', /cotizacion de importacion/i.test(textoAnalista));
     comprobar('El Analista ve su nombre en la barra', /diego fuentes/i.test(textoAnalista));
-    comprobar('El enlace Tarifas NO aparece para el Analista', !/tarifas/i.test(textoAnalista));
-    comprobar('El enlace Usuarios NO aparece para el Analista', !/Usuarios/.test(textoAnalista));
+    comprobar(
+      'El enlace Tarifas NO aparece para el Analista',
+      !enlacesAnalista.some((texto) => /tarifas/i.test(texto)),
+      `enlaces=${JSON.stringify(enlacesAnalista)}`,
+    );
+    comprobar(
+      'El enlace Usuarios NO aparece para el Analista',
+      !enlacesAnalista.some((texto) => /usuarios/i.test(texto)),
+      `enlaces=${JSON.stringify(enlacesAnalista)}`,
+    );
 
     await evaluar(`window.location.href = '${FRONTEND}/tarifas'`);
     await new Promise((r) => setTimeout(r, 2500));

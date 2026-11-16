@@ -59,7 +59,7 @@ export default function Cotizador() {
   const [valorMercaderia, setValorMercaderia] = useState('');
   const [origenId, setOrigenId] = useState('');
   const [destinoId, setDestinoId] = useState('');
-  const [tipoContenedor, setTipoContenedor] = useState('40HC');
+  const [tipoContenedor, setTipoContenedor] = useState('auto');
   const [contingencia, setContingencia] = useState(0);
   const [guardar, setGuardar] = useState(true);
 
@@ -106,7 +106,10 @@ export default function Cotizador() {
   // ==================================================================
   // Conversion en vivo kg -> tn (feedback inmediato, no es el resultado final)
   // ==================================================================
-  const capacidadTn = CAPACIDAD_POR_TIPO[tipoContenedor] ?? 25;
+  const esAutomatico = tipoContenedor === 'auto';
+  // En modo automatico se usa 25 tn solo para la estimacion en vivo; el tipo
+  // definitivo lo elige el backend comparando las tarifas de la ruta.
+  const capacidadTn = esAutomatico ? 25 : CAPACIDAD_POR_TIPO[tipoContenedor] ?? 25;
 
   const conversiones = useMemo(() => {
     const kg = aNumero(pesoKg);
@@ -157,11 +160,12 @@ export default function Cotizador() {
         peso_kg: aNumero(pesoKg),
         puerto_origen_id: Number(origenId),
         puerto_destino_id: Number(destinoId),
-        tipo_contenedor: tipoContenedor,
         dias_contingencia: Number(contingencia),
         guardar,
       };
 
+      // Sin tipo, el backend compara las tarifas de la ruta y elige el menor flete.
+      if (!esAutomatico) cuerpo.tipo_contenedor = tipoContenedor;
       if (valorInformado) cuerpo.valor_mercaderia_usd = valorMercaderiaNumero;
 
       const { datos } = await api.calcular(cuerpo);
@@ -204,9 +208,10 @@ export default function Cotizador() {
         <div>
           <h1 className="pagina__titulo">Cotizacion de Importacion</h1>
           <p className="pagina__descripcion">
-            Simule el costo y los plazos de una importacion. El sistema calcula los
-            contenedores segun el peso y la capacidad del tipo elegido:{' '}
-            <strong>20 pies = 23 tn</strong> y <strong>40 pies = 25 tn</strong>.
+            Simule el costo y los plazos de una importacion. El sistema elige
+            automaticamente el contenedor de menor costo segun el peso y las tarifas
+            de la ruta. En Opciones avanzadas puede forzar{' '}
+            <strong>20 pies (23 tn)</strong> o <strong>40 pies (25 tn)</strong>.
           </p>
         </div>
       </div>
@@ -267,7 +272,10 @@ export default function Cotizador() {
                 </div>
                 <div className="campo__ayuda" style={{ marginTop: '0.35rem', textAlign: 'center' }}>
                   {conversiones.contenedorEstimado} contenedor
-                  {conversiones.contenedorEstimado === 1 ? '' : 'es'} de {capacidadTn} tn
+                  {conversiones.contenedorEstimado === 1 ? '' : 'es'}
+                  {esAutomatico
+                    ? ` estimado${conversiones.contenedorEstimado === 1 ? '' : 's'}; el tipo se elige al calcular.`
+                    : ` de ${capacidadTn} tn`}
                 </div>
               </div>
             )}
@@ -362,7 +370,7 @@ export default function Cotizador() {
                 <Campo
                   etiqueta="Tipo de contenedor"
                   htmlFor="tipo"
-                  ayuda="El sistema ajusta la cantidad de contenedores a la capacidad elegida."
+                  ayuda="Automatico compara las tarifas de la ruta y usa el menor flete. Tambien puede forzar 20 o 40 pies."
                 >
                   <select
                     id="tipo"
@@ -374,6 +382,7 @@ export default function Cotizador() {
                       setResultado(null);
                     }}
                   >
+                    <option value="auto">Automatico (menor costo)</option>
                     <option value="40HC">40 pies (25 tn)</option>
                     <option value="20">20 pies (23 tn)</option>
                   </select>

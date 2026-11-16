@@ -48,6 +48,27 @@ export async function buscarRuta(puertoOrigenId, puertoDestinoId, tipoContenedor
 }
 
 /**
+ * Devuelve todas las tarifas registradas para una ruta.
+ *
+ * La usa la seleccion automatica: con la lista completa se puede comparar el
+ * costo total de cada tipo de contenedor antes de elegir. `buscarRuta` sigue
+ * siendo la via cuando el usuario fuerza un tipo puntual.
+ *
+ * @param {number} puertoOrigenId
+ * @param {number} puertoDestinoId
+ * @returns {Promise<object[]>}
+ */
+export async function listarPorRuta(puertoOrigenId, puertoDestinoId) {
+  return queryAll(
+    `SELECT * FROM tarifas_flete
+     WHERE puerto_origen_id = $1
+       AND puerto_destino_id = $2
+     ORDER BY tipo_contenedor`,
+    [puertoOrigenId, puertoDestinoId],
+  );
+}
+
+/**
  * @returns {Promise<object[]>} Todas las tarifas con los nombres de sus puertos.
  */
 export async function listar() {

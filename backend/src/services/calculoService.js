@@ -22,6 +22,10 @@
  * La capacidad NO esta escrita aqui: se lee de la tarifa de la ruta
  * (columna capacidad_max_tn), con 23 tn para 20 pies y 25 tn para 40 pies
  * como valores de respaldo.
+ *
+ * Si el usuario no especifica `tipo_contenedor`, se evaluan todas las tarifas
+ * de la ruta y se elige la de menor costo total de flete. El usuario puede
+ * forzar un tipo desde las opciones avanzadas.
  */
 
 import * as tarifaModel from '../models/tarifaModel.js';
@@ -31,8 +35,8 @@ import { ApiError } from '../utils/ApiError.js';
 import {
   TASA_IMPUESTO_CIF,
   TASA_SEGURO,
+  CAPACIDAD_POR_TIPO,
   MAX_TONELADAS_POR_CONTENEDOR,
-  TIPO_CONTENEDOR_DEFAULT,
   KG_POR_TONELADA,
   redondearMoneda,
   redondearPeso,
@@ -64,6 +68,70 @@ export function calcularContenedores(toneladas, capacidadMaxTn) {
 }
 
 /**
+ * Evalua una tarifa concreta para una carga.
+ *
+ * La capacidad se toma de la tarifa y, si falta o viene en cero, del mapa de
+ * respaldo por tipo. Los valores numericos se normalizan porque PostgreSQL
+ * puede devolver las columnas NUMERIC como texto.
+ *
+ * @param {object} tarifa
+ * @param {number} toneladas
+ * @returns {{tarifa:object, capacidadMaxTn:number, precioContenedorUsd:number,
+ *            cantidadContenedores:number, costoFleteUsd:number}}
+ */
+function evaluarTarifa(tarifa, toneladas) {
+  const capacidadMaxTn =
+    Number(tarifa.capacidad_max_tn) ||
+    CAPACIDAD_POR_TIPO[tarifa.tipo_contenedor] ||
+    MAX_TONELADAS_POR_CONTENEDOR;
+  const precioContenedorUsd = Number(tarifa.precio_usd);
+  const cantidadContenedores = calcularContenedores(toneladas, capacidadMaxTn);
+  const costoFleteUsd = redondearMoneda(cantidadContenedores * precioContenedorUsd);
+
+  return {
+    tarifa,
+    capacidadMaxTn,
+    precioContenedorUsd,
+    cantidadContenedores,
+    costoFleteUsd,
+  };
+}
+
+/**
+ * Ordena las tarifas de una ruta por conveniencia para la carga.
+ *
+ * Criterio: menor flete total; si empatan, menos contenedores; luego mayor
+ * capacidad (prefiere 40 pies); y finalmente el tipo como desempate estable.
+ * La primera opcion es la que se usa en modo automatico.
+ *
+ * @param {object[]} tarifas
+ * @param {number} toneladas
+ * @returns {object[]}
+ */
+function ordenarTarifasPorCosto(tarifas, toneladas) {
+  return tarifas
+    .map((tarifa) => evaluarTarifa(tarifa, toneladas))
+    .sort(
+      (a, b) =>
+        a.costoFleteUsd - b.costoFleteUsd ||
+        a.cantidadContenedores - b.cantidadContenedores ||
+        b.capacidadMaxTn - a.capacidadMaxTn ||
+        a.tarifa.tipo_contenedor.localeCompare(b.tarifa.tipo_contenedor),
+    );
+}
+
+/** Da forma a una opcion evaluada para exponerla en la API. */
+function describirOpcion({ tarifa, capacidadMaxTn, precioContenedorUsd, cantidadContenedores, costoFleteUsd }) {
+  return {
+    tipo_contenedor: tarifa.tipo_contenedor,
+    capacidad_max_tn: capacidadMaxTn,
+    cantidad_contenedores: cantidadContenedores,
+    precio_contenedor_usd: precioContenedorUsd,
+    costo_flete_usd: costoFleteUsd,
+  };
+}
+
+/**
  * Simula una cotizacion de importacion.
  *
  * @param {object} entrada - Ya validada por Zod en el middleware.
@@ -84,7 +152,7 @@ export async function simular(entrada) {
     puerto_origen_id: puertoOrigenId,
     puerto_destino_id: puertoDestinoId,
     dias_contingencia: diasContingencia = 0,
-    tipo_contenedor: tipoContenedorSolicitado = TIPO_CONTENEDOR_DEFAULT,
+    tipo_contenedor: tipoContenedorSolicitado = null,
     usuario_id: usuarioId = null,
     guardar = false,
   } = entrada;
@@ -109,27 +177,54 @@ export async function simular(entrada) {
     throw ApiError.badRequest('El puerto de origen y destino no pueden ser iguales.', { codigo: 'RUTA_INVALIDA' });
   }
 
-  // --- 2. Obtener la tarifa de la ruta ---
-  const tarifa = await tarifaModel.buscarRuta(origen.id, destino.id, tipoContenedorSolicitado);
+  // --- 2. Conversion de unidades ---
+  const toneladas = convertirKgAToneladas(pesoKg);
 
-  if (!tarifa) {
-    const etiquetaTipo = tipoContenedorSolicitado === '20' ? '20 pies' : '40 pies';
-    throw ApiError.conflicto(
-      `No existe tarifa vigente para ${etiquetaTipo} en la ruta ${origen.nombre} (${origen.pais_origen}) -> ` +
-        `${destino.nombre} (${destino.pais_origen}). Cargue la planilla de tarifas correspondiente.`,
-      { codigo: 'RUTA_SIN_TARIFA' },
-    );
+  // --- 3. Obtener la tarifa: forzada o elegida por menor costo ---
+  const tipoSolicitado = tipoContenedorSolicitado || null;
+  const tipoContenedorAutomatico = !tipoSolicitado;
+
+  let evaluacion;
+  let opciones = [];
+
+  if (tipoSolicitado) {
+    const tarifa = await tarifaModel.buscarRuta(origen.id, destino.id, tipoSolicitado);
+
+    if (!tarifa) {
+      const etiquetaTipo = tipoSolicitado === '20' ? '20 pies' : '40 pies';
+      throw ApiError.conflicto(
+        `No existe tarifa vigente para ${etiquetaTipo} en la ruta ${origen.nombre} (${origen.pais_origen}) -> ` +
+          `${destino.nombre} (${destino.pais_origen}). Cargue la planilla de tarifas correspondiente.`,
+        { codigo: 'RUTA_SIN_TARIFA' },
+      );
+    }
+
+    evaluacion = evaluarTarifa(tarifa, toneladas);
+    opciones = [evaluacion];
+  } else {
+    const tarifas = await tarifaModel.listarPorRuta(origen.id, destino.id);
+    opciones = ordenarTarifasPorCosto(tarifas, toneladas);
+    evaluacion = opciones[0] ?? null;
+
+    if (!evaluacion) {
+      throw ApiError.conflicto(
+        `No existe tarifa vigente para la ruta ${origen.nombre} (${origen.pais_origen}) -> ` +
+          `${destino.nombre} (${destino.pais_origen}). Cargue la planilla de tarifas correspondiente.`,
+        { codigo: 'RUTA_SIN_TARIFA' },
+      );
+    }
   }
 
+  const {
+    tarifa,
+    capacidadMaxTn,
+    precioContenedorUsd,
+    cantidadContenedores,
+    costoFleteUsd,
+  } = evaluacion;
   const tipoContenedor = tarifa.tipo_contenedor;
-  const capacidadMaxTn = tarifa.capacidad_max_tn || MAX_TONELADAS_POR_CONTENEDOR;
-
-  // --- 3. Conversion de unidades y calculo de contenedores ---
-  const toneladas = convertirKgAToneladas(pesoKg);
-  const cantidadContenedores = calcularContenedores(toneladas, capacidadMaxTn);
 
   // --- 4. Desglose financiero ---
-  const costoFleteUsd = redondearMoneda(cantidadContenedores * tarifa.precio_usd);
   const valorAseguradoUsd = hayValorCarga ? valorMercaderiaUsd : 0;
   const seguroUsd = hayValorCarga ? redondearMoneda(valorAseguradoUsd * TASA_SEGURO) : 0;
   const valorCifUsd = hayValorCarga
@@ -150,6 +245,8 @@ export async function simular(entrada) {
     toneladas,
     cantidad_contenedores: cantidadContenedores,
     tipo_contenedor: tipoContenedor,
+    tipo_contenedor_automatico: tipoContenedorAutomatico,
+    opciones_contenedor: opciones.map(describirOpcion),
     capacidad_max_tn: capacidadMaxTn,
     /** Porcentaje de ocupacion del ultimo contenedor (util para la UI). */
     ocupacion_ultimo_contenedor_pct: redondearPeso(
@@ -176,7 +273,7 @@ export async function simular(entrada) {
     // --- Desglose financiero ---
     valor_mercaderia_usd: hayValorCarga ? redondearMoneda(valorMercaderiaUsd) : null,
     tiene_valor_carga: hayValorCarga,
-    precio_contenedor_usd: tarifa.precio_usd,
+    precio_contenedor_usd: precioContenedorUsd,
     costo_flete_usd: costoFleteUsd,
     seguro_usd: seguroUsd,
     valor_cif_usd: valorCifUsd,
@@ -211,7 +308,7 @@ export async function simular(entrada) {
       dias_viaje_base: tarifa.dias_viaje_base,
       valor_mercaderia_usd: hayValorCarga ? redondearMoneda(valorMercaderiaUsd) : null,
       capacidad_max_tn: capacidadMaxTn,
-      precio_contenedor_usd: tarifa.precio_usd,
+      precio_contenedor_usd: precioContenedorUsd,
       dias_contingencia: diasContingencia,
       costo_flete_usd: costoFleteUsd,
       seguro_usd: seguroUsd,

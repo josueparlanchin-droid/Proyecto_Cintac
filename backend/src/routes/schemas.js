@@ -12,6 +12,7 @@ import { z } from 'zod';
 import {
   DIAS_CONTINGENCIA_MAX,
   PESO_MAXIMO_KG,
+  TIPOS_CONTENEDOR,
 } from '../utils/constantes.js';
 
 /** Numero positivo finito, sin notacion cientifica ni valores absurdamente grandes. */
@@ -76,11 +77,19 @@ export const esquemaCalculo = z
       .max(DIAS_CONTINGENCIA_MAX, `Los dias de contingencia no pueden superar ${DIAS_CONTINGENCIA_MAX}.`)
       .default(0),
 
-    tipo_contenedor: z
-      .enum(['20', '40', '40HC', '40RF'], {
-        message: 'Tipo de contenedor no valido.',
-      })
-      .default('40HC'),
+    /**
+     * Si se omite (o llega vacio), el motor evalua todas las tarifas de la
+     * ruta y elige la de menor costo. El valor explicito solo se usa para
+     * forzar un tipo desde las opciones avanzadas.
+     */
+    tipo_contenedor: z.preprocess(
+      (valor) => (valor === '' || valor === null ? undefined : valor),
+      z
+        .enum([...TIPOS_CONTENEDOR], {
+          message: 'Tipo de contenedor no valido.',
+        })
+        .optional(),
+    ),
 
     /** Si es false, el calculo se devuelve sin persistir (modo simulacion). */
     guardar: z.coerce.boolean().default(true),

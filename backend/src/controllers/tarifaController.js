@@ -22,12 +22,13 @@ import { REGIONES } from '../utils/constantes.js';
  * proceso de importacion.
  */
 const EJEMPLOS_PLANTILLA = [
-  ['CNSHA', 'CLSAI', '40HC', '2450', '28', '25'],
-  ['CNSHA', 'CLVAP', '40HC', '2680', '30', '25'],
-  ['CNNGB', 'CLSAI', '40HC', '2750', '26', '25'],
-  ['DEHAM', 'CLSAV', '40HC', '2350', '35', '25'],
-  ['NLRTM', 'CLVAP', '40HC', '1910', '25', '25'],
-  ['USMIA', 'CLSAI', '20', '1090', '18', '20'],
+  ['CNSHA', 'CLSAI', '40HC', '2520', '33', '25'],
+  ['CNSHA', 'CLVAP', '40HC', '2450', '32', '25'],
+  ['CNNGB', 'CLSAI', '40HC', '2460', '32', '25'],
+  ['DEHAM', 'CLSAV', '40HC', '2050', '27', '25'],
+  ['NLRTM', 'CLVAP', '40HC', '1890', '24', '25'],
+  ['CLSAI', 'PECLL', '20', '900', '5', '23'],
+  ['CLVAP', 'PECLL', '40', '970', '5', '25'],
 ];
 
 /**

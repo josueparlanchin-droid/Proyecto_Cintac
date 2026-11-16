@@ -1,9 +1,9 @@
 # Cotizador Logístico de Importaciones Comex — Cintac S.A.
 
 MVP académico (INACAP) de un cotizador de fletes marítimos de importación.
-Calcula costo landed ( merchandise + flete + seguro + IVA) a partir de
-tarifas por ruta, guarda historial con aislamiento por rol y exporta el
-informe a PDF.
+Calcula el costo landed (mercadería + flete + seguro + IVA) a partir de
+tarifas por ruta, elige automáticamente el contenedor de menor costo, guarda
+historial con aislamiento por rol y exporta el informe a PDF.
 
 - **Frontend:** React 19 + Vite 8 + CSS puro (sin framework de estilos)
 - **Backend:** Node.js + Express 5
@@ -15,7 +15,7 @@ informe a PDF.
 > depender de instalar un motor de datos. Al desplegar en Render, el disco es
 > efímero: cada redeploy borraba la base y con ella el historial. PostgreSQL
 > alojado en Neon resuelve eso y además es el motor que se evalúa en la
-> carrera. La migración está completa: el modelo de datos (4 tablas), la lógica
+> carrera. La migración está completa: el modelo de datos (5 tablas), la lógica
 > de cálculo y los endpoints no cambiaron.
 
 ---
@@ -176,7 +176,7 @@ para 20 pies y **970 USD** para 40 pies.
 | Método | Ruta | Acceso | Descripción |
 | --- | --- | --- | --- |
 | `POST` | `/auth/login` | Público | Inicia sesión |
-| `POST` | `/auth/registro` | Público | Alta con código de invitación, devuelve token |
+| `POST` | `/auth/registro` | Público | Alta con código de invitación; queda pendiente de aprobación (sin token) |
 | `GET` | `/auth/me` | Autenticado | Perfil y permisos |
 | `GET` | `/usuarios` | Jefatura | Cuentas con su bitácora de acciones |
 | `PATCH` | `/usuarios/:id/rol` | Jefatura | Promueve o degrada entre Analista y Administrador |
@@ -273,14 +273,26 @@ estas columnas:
 | `puerto_origen` | Sí | `CNSHA` |
 | `puerto_destino` | Sí | `CLSAI` |
 | `precio_usd` | Sí | `2450` |
-| `tipo_contenedor` | No | `40HC` |
+| `tipo_contenedor` | No | `40HC` (válidos: `20`, `40`, `40HC`, `40RF`) |
 | `dias_viaje_base` | No | `28` |
-| `capacidad_max_tn` | No | `25` |
+| `capacidad_max_tn` | No | `25` (23 si el tipo es `20`) |
 
 La importación es **idempotente**: volver a subir la misma ruta actualiza el
-precio en vez de duplicar. Las filas inválidas se omiten y se informan al
-usuario en lugar de abortar toda la carga. Hay una plantilla descargable en
+precio en vez de duplicar. Se aceptan rutas internacionales → Chile y
+Chile → Callao. Las filas inválidas se omiten y se informan al usuario en
+lugar de abortar toda la carga. Hay una plantilla descargable en
 `frontend/public/plantilla-tarifas.csv`.
+
+## Selección del contenedor
+
+El campo `tipo_contenedor` de `POST /cotizaciones/calcular` es opcional. Si se
+omite, el backend evalua todas las tarifas de la ruta y elige la de **menor
+flete total**. El desempate es: menos contenedores, luego mayor capacidad
+(40 pies) y finalmente el tipo. La respuesta incluye
+`tipo_contenedor_automatico` y la comparativa `opciones_contenedor`.
+
+Desde la interfaz, el cotizador usa **Automático** por defecto. En
+**Opciones avanzadas** se puede forzar 20 pies (23 tn) o 40 pies (25 tn).
 
 ## Verificación
 
@@ -293,13 +305,13 @@ npm run verificar:api    # solo la API
 ```
 
 - `frontend/scripts/verificar-frontend.js` maneja Chrome Headless por el
-  protocolo DevTools y comprueba 60 casos reales de interfaz: montaje, login,
+  protocolo DevTools y comprueba 63 casos reales de interfaz: montaje, login,
   conversión kg→tn en vivo, cálculo, PDF, historial, permisos del Analista,
   persistencia de sesión y ausencia de errores en consola.
 - `backend/scripts/verificar-api.js` recorre los endpoints de extremo a extremo y
-  comprueba 109 casos, incluidos los límites de 23 tn (20 pies) y 25 tn
-  (40 pies), las rutas Chile → Callao, el registro pendiente de aprobación,
-  el aislamiento por rol y el rate limiting.
+  comprueba 120 casos, incluidos los límites de 23 tn (20 pies) y 25 tn
+  (40 pies), la selección automática por costo, las rutas Chile → Callao, el
+  registro pendiente de aprobación, el aislamiento por rol y el rate limiting.
 
 > El orden importa: la prueba de la API es la última a propósito, porque agota
 > el cupo de 20 intentos de login para comprobar el bloqueo. Si la ejecutas por
@@ -318,7 +330,7 @@ npm run reset
 ```
 
 Esto **borra todas las tablas** de la base a la que apunte `DATABASE_URL` y
-vuelve a cargar usuarios, puertos, tarifas y las 13 cotizaciones de ejemplo.
+vuelve a cargar usuarios, puertos, tarifas y las 15 cotizaciones de ejemplo.
 
 - A diferencia de SQLite, aquí no hace falta detener el backend para borrar:
   PostgreSQL opera con la base en línea. Aun así se recomienda, para no tener
@@ -474,7 +486,7 @@ era justo el riesgo del enfoque SQLite + PostgreSQL en paralelo.
 El esquema se crea solo en el primer arranque (`CREATE TABLE IF NOT EXISTS`) y
 se puebla con `npm run seed`, que es idempotente.
 
-Cuatro tablas:
+Cinco tablas:
 
 | Tabla | Contenido |
 | --- | --- |
@@ -482,6 +494,7 @@ Cuatro tablas:
 | `puertos` | Puertos disponibles |
 | `tarifas_flete` | Precio, tránsito y contingencia por puerto de origen/destino |
 | `cotizaciones_log` | Historial de cotizaciones con su desglose completo |
+| `usuarios_auditoria` | Bitácora de altas, cambios y bajas de usuarios |
 
 Decisiones de diseño relevantes para PostgreSQL:
 
@@ -494,8 +507,9 @@ Decisiones de diseño relevantes para PostgreSQL:
   encontrar "Shanghai" sin avisar.
 - **Las escrituras usan `RETURNING`.** Evita el `SELECT` de verificación que
   hacía falta antes para obtener el id insertado.
-- **La importación de tarifas es una transacción.** Si una fila de la planilla
-  falla, no queda ni la mitad de la carga ni las tarifas anteriores modificadas.
+- **La importación de tarifas escribe dentro de una transacción.** Las filas
+  inválidas se omiten y se reportan; las válidas se confirman juntas. Si ocurre
+  un error inesperado de base, la transacción revierte todo.
 - **El pool es de 10 conexiones** (`max: 10`), acorde al plan gratuito de Neon y
   al único proceso Node que levanta Render.
 

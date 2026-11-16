@@ -102,6 +102,8 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
     toneladas,
     cantidad_contenedores: contenedores,
     tipo_contenedor: tipoContenedor,
+    tipo_contenedor_automatico: tipoAutomatico,
+    opciones_contenedor: opcionesContenedor,
     capacidad_max_tn: capacidadMax,
     ocupacion_ultimo_contenedor_pct: ocupacion,
     puerto_origen: origen,
@@ -203,6 +205,59 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
             tipo={tipoContenedor}
             capacidad={capacidadMax ?? parametros?.limite_toneladas_por_contenedor ?? 25}
           />
+
+          {tipoAutomatico && (
+            <p
+              style={{
+                marginTop: 'var(--esp-2)',
+                fontSize: 'var(--texto-xs)',
+                color: 'var(--terracota)',
+                fontWeight: '600',
+              }}
+            >
+              Tipo elegido automaticamente por menor flete.
+            </p>
+          )}
+
+          {Array.isArray(opcionesContenedor) && opcionesContenedor.length > 1 && (
+            <details style={{ marginTop: 'var(--esp-2)' }}>
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 'var(--texto-xs)',
+                  color: 'var(--gris-claro)',
+                  fontWeight: '600',
+                }}
+              >
+                Comparativa de tarifas evaluadas
+              </summary>
+
+              <ul
+                style={{
+                  margin: '0.5rem 0 0',
+                  paddingLeft: '1.1rem',
+                  fontSize: 'var(--texto-xs)',
+                  color: 'var(--gris-medio)',
+                  lineHeight: '1.7',
+                }}
+              >
+                {opcionesContenedor.map((opcion) => {
+                  const elegida = opcion.tipo_contenedor === tipoContenedor;
+
+                  return (
+                    <li
+                      key={opcion.tipo_contenedor}
+                      style={{ color: elegida ? 'var(--terracota)' : undefined, fontWeight: elegida ? '600' : undefined }}
+                    >
+                      {opcion.tipo_contenedor} pies: {opcion.cantidad_contenedores} contenedor(es) ×{' '}
+                      {formatearUSD(opcion.precio_contenedor_usd)} = {formatearUSD(opcion.costo_flete_usd)}
+                      {elegida ? ' (elegida)' : ''}
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          )}
         </div>
 
         {/* ---------- Desglose financiero ---------- */}

@@ -702,6 +702,142 @@ async function main() {
   );
 
   await comprobar(
+    'Automatico: 21.000 kg San Antonio -> Callao elige 20 pies (900 USD)',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 21_000,
+        valor_mercaderia_usd: 70_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) =>
+      c.datos.tipo_contenedor === '20' &&
+      c.datos.tipo_contenedor_automatico === true &&
+      c.datos.cantidad_contenedores === 1 &&
+      c.datos.costo_flete_usd === 900,
+    {
+      statusEsperado: 201,
+      mostrar: (c) => `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.costo_flete_usd} USD`,
+    },
+  );
+
+  await comprobar(
+    'Automatico: 24.000 kg San Antonio -> Callao elige 40 pies (970 USD)',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 24_000,
+        valor_mercaderia_usd: 70_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) =>
+      c.datos.tipo_contenedor === '40' &&
+      c.datos.tipo_contenedor_automatico === true &&
+      c.datos.cantidad_contenedores === 1 &&
+      c.datos.costo_flete_usd === 970 &&
+      Array.isArray(c.datos.opciones_contenedor) &&
+      c.datos.opciones_contenedor.length === 2 &&
+      c.datos.opciones_contenedor[0].tipo_contenedor === '40' &&
+      c.datos.opciones_contenedor.some((opcion) => opcion.tipo_contenedor === '20'),
+    {
+      statusEsperado: 201,
+      mostrar: (c) =>
+        `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.costo_flete_usd} USD ` +
+        `(${c.datos.opciones_contenedor?.length ?? 0} opciones evaluadas)`,
+    },
+  );
+
+  await comprobar(
+    'Forzar 20 pies en 24.000 kg mantiene 2 contenedores (1.800 USD)',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 24_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        tipo_contenedor: '20',
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) =>
+      c.datos.tipo_contenedor === '20' &&
+      c.datos.tipo_contenedor_automatico === false &&
+      c.datos.cantidad_contenedores === 2 &&
+      c.datos.costo_flete_usd === 1_800,
+    {
+      statusEsperado: 201,
+      mostrar: (c) => `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.costo_flete_usd} USD`,
+    },
+  );
+
+  await comprobar(
+    'Automatico en una ruta con una sola tarifa usa 40HC',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 10_000,
+        puerto_origen_id: SHA,
+        puerto_destino_id: VAP,
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) =>
+      c.datos.tipo_contenedor === '40HC' &&
+      c.datos.tipo_contenedor_automatico === true &&
+      c.datos.capacidad_max_tn === 25 &&
+      c.datos.cantidad_contenedores === 1,
+    { statusEsperado: 201, mostrar: (c) => `${c.datos.tipo_contenedor}, ${c.datos.capacidad_max_tn} tn` },
+  );
+
+  await comprobar(
+    'Automatico sin tarifas para la ruta -> 409',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 1_000,
+        puerto_origen_id: SHA,
+        puerto_destino_id: PECLL,
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) => c.error.codigo === 'RUTA_SIN_TARIFA',
+    { statusEsperado: 409 },
+  );
+
+  await comprobar(
+    'tipo_contenedor invalido -> 400',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 1_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        tipo_contenedor: '20GP',
+        guardar: false,
+      },
+    }),
+    (c) => c.error.codigo === 'VALIDACION_FALLIDA',
+    { statusEsperado: 400 },
+  );
+
+  await comprobar(
     'Ruta sin tarifa (China -> Callao) -> 409',
     pedir('/cotizaciones/calcular', {
       metodo: 'POST',
@@ -1018,6 +1154,100 @@ async function main() {
     })(),
     (c) => c.datos.insertadas === 0 && c.datos.actualizadas === 2,
     { statusEsperado: 201, mostrar: (c) => `${c.datos.actualizadas} actualizadas, ${c.datos.insertadas} nuevas` },
+  );
+
+  // Las rutas Chile -> Callao tambien se cargan por planilla.
+  const csvCallao = [
+    'puerto_origen,puerto_destino,tipo_contenedor,precio_usd,dias_viaje_base,capacidad_max_tn',
+    'San Antonio,Callao,20,900,5,23',
+    'Valparaiso,Callao,40,970,5,25',
+  ].join('\n');
+  const formDataCallao = new FormData();
+  formDataCallao.append('archivo', new Blob([csvCallao], { type: 'text/csv' }), 'tarifas_callao.csv');
+
+  await comprobar(
+    'POST /tarifas/upload acepta rutas Chile -> Callao',
+    pedir('/tarifas/upload', { metodo: 'POST', token: tokenAdmin, cuerpo: formDataCallao }),
+    (c) => c.datos.omitidas === 0 && c.datos.insertadas + c.datos.actualizadas === 2,
+    {
+      statusEsperado: 201,
+      mostrar: (c) => `${c.datos.insertadas} nuevas, ${c.datos.actualizadas} actualizadas, ${c.datos.omitidas} omitidas`,
+    },
+  );
+
+  // Sin capacidad explicita, un contenedor de 20 pies debe quedar en 23 tn.
+  const formDataCapacidad = new FormData();
+  formDataCapacidad.append(
+    'archivo',
+    new Blob(
+      ['puerto_origen,puerto_destino,tipo_contenedor,precio_usd,dias_viaje_base,capacidad_max_tn\nCLSAI,PECLL,20,900,5,'],
+      { type: 'text/csv' },
+    ),
+    'tarifas_capacidad.csv',
+  );
+
+  await comprobar(
+    'POST /tarifas/upload sin capacidad en 20 pies aplica 23 tn',
+    pedir('/tarifas/upload', { metodo: 'POST', token: tokenAdmin, cuerpo: formDataCapacidad }),
+    (c) => c.datos.omitidas === 0,
+    { statusEsperado: 201, mostrar: (c) => `${c.datos.actualizadas} actualizadas` },
+  );
+
+  await comprobar(
+    'La tarifa de 20 pies quedo con capacidad 23 tn',
+    pedir('/tarifas', { token: tokenAdmin }),
+    (c) => {
+      const tarifa = c.datos.find(
+        (t) => t.origen_codigo === 'CLSAI' && t.destino_codigo === 'PECLL' && t.tipo_contenedor === '20',
+      );
+      return tarifa?.capacidad_max_tn === 23;
+    },
+    {
+      mostrar: (c) => {
+        const tarifa = c.datos.find(
+          (t) => t.origen_codigo === 'CLSAI' && t.destino_codigo === 'PECLL' && t.tipo_contenedor === '20',
+        );
+        return `CLSAI->PECLL 20 pies: ${tarifa?.capacidad_max_tn} tn`;
+      },
+    },
+  );
+
+  const formDataMismoPuerto = new FormData();
+  formDataMismoPuerto.append(
+    'archivo',
+    new Blob(
+      ['puerto_origen,puerto_destino,tipo_contenedor,precio_usd,dias_viaje_base,capacidad_max_tn\nCLSAI,CLSAI,40,900,5,25'],
+      { type: 'text/csv' },
+    ),
+    'tarifas_mismo_puerto.csv',
+  );
+
+  await comprobar(
+    'POST /tarifas/upload rechaza origen igual a destino',
+    pedir('/tarifas/upload', { metodo: 'POST', token: tokenAdmin, cuerpo: formDataMismoPuerto }),
+    (c) =>
+      c.error?.codigo === 'PLANILLA_SIN_FILAS_VALIDAS' &&
+      c.error.detalle?.[0]?.motivo.includes('iguales'),
+    { statusEsperado: 400, mostrar: (c) => c.error.detalle?.[0]?.motivo ?? '' },
+  );
+
+  const formDataTipoInvalido = new FormData();
+  formDataTipoInvalido.append(
+    'archivo',
+    new Blob(
+      ['puerto_origen,puerto_destino,tipo_contenedor,precio_usd,dias_viaje_base,capacidad_max_tn\nCLSAI,PECLL,20GP,900,5,23'],
+      { type: 'text/csv' },
+    ),
+    'tarifas_tipo_invalido.csv',
+  );
+
+  await comprobar(
+    'POST /tarifas/upload rechaza un tipo de contenedor invalido',
+    pedir('/tarifas/upload', { metodo: 'POST', token: tokenAdmin, cuerpo: formDataTipoInvalido }),
+    (c) =>
+      c.error?.codigo === 'PLANILLA_SIN_FILAS_VALIDAS' &&
+      c.error.detalle?.[0]?.motivo.includes('tipo_contenedor invalido'),
+    { statusEsperado: 400, mostrar: (c) => c.error.detalle?.[0]?.motivo ?? '' },
   );
 
   const formDataMalo = new FormData();

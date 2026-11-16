@@ -30,6 +30,9 @@ export const CAPACIDAD_POR_TIPO = Object.freeze({
   '40RF': 25,
 });
 
+/** Tipos de contenedor admitidos por la API y por la importacion de planillas. */
+export const TIPOS_CONTENEDOR = Object.freeze(['20', '40', '40HC', '40RF']);
+
 /**
  * Limite de carga por contenedor de 40 pies. Es el valor por defecto de la
  * columna `tarifas_flete.capacidad_max_tn`, por lo que el dato real usado

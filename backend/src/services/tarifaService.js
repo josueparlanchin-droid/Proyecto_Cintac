@@ -19,7 +19,9 @@ import * as tarifaModel from '../models/tarifaModel.js';
 import { enTransaccion } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
 import {
+  CAPACIDAD_POR_TIPO,
   TIPO_CONTENEDOR_DEFAULT,
+  TIPOS_CONTENEDOR,
   MAX_TONELADAS_POR_CONTENEDOR,
 } from '../utils/constantes.js';
 
@@ -83,16 +85,25 @@ function hojaAMatrix(hoja) {
       const leer = (campo) =>
         mapaEncabezado.has(campo) ? fila[mapaEncabezado.get(campo)] : undefined;
 
+      // Una celda vacia no es lo mismo que una celda ausente: en ambos casos
+      // se aplica el tipo por defecto, pero nunca se guarda una cadena vacia.
+      const tipoCrudo = String(leer('tipo') ?? '').trim().toUpperCase();
+      const tipo = tipoCrudo || TIPO_CONTENEDOR_DEFAULT;
+
+      const capacidadLeida = leer('capacidad');
+      const capacidadNumero = Number(capacidadLeida);
+      const capacidad =
+        capacidadLeida === undefined || String(capacidadLeida).trim() === '' || capacidadNumero === 0
+          ? CAPACIDAD_POR_TIPO[tipo] ?? MAX_TONELADAS_POR_CONTENEDOR
+          : capacidadNumero;
+
       return {
         origen: String(leer('origen') ?? '').trim(),
         destino: String(leer('destino') ?? '').trim(),
-        tipo: String(leer('tipo') ?? TIPO_CONTENEDOR_DEFAULT).trim().toUpperCase(),
+        tipo,
         precio: Number(leer('precio')),
         dias: leer('dias') === undefined || Number(leer('dias')) === 0 ? null : Number(leer('dias')),
-        capacidad:
-          leer('capacidad') === undefined || Number(leer('capacidad')) === 0
-            ? MAX_TONELADAS_POR_CONTENEDOR
-            : Number(leer('capacidad')),
+        capacidad,
       };
     }),
   };
@@ -163,8 +174,9 @@ export async function importarDesdeBuffer(buffer, nombreArchivo = 'planilla') {
 
   const resolverPuerto = crearIndicePuertos(await puertoModel.listar());
 
-  // Toda la importacion en UNA transaccion: si una fila viene mal, no se
-  // escribe ninguna, y la planilla original sigue intacta.
+  // Las escrituras se ejecutan dentro de UNA transaccion. Las filas invalidas
+  // se omiten y se informan al usuario; las validas se confirman juntas. Si
+  // ocurre un error inesperado de base, la transaccion revierte todo.
   //
   // El recorrido es con `for...of` y no con `forEach` a proposito: las
   // escrituras deben ejecutarse UNA tras otra y en orden. Con `forEach` las
@@ -188,11 +200,20 @@ export async function importarDesdeBuffer(buffer, nombreArchivo = 'planilla') {
         continue;
       }
 
-      if (origen.region === 'CHILE' || destino.region !== 'CHILE') {
+      if (origen.id === destino.id) {
         resumen.omitidas += 1;
         resumen.errores.push({
           fila: numeroFila,
-          motivo: `Ruta invalida: el origen debe ser internacional y el destino chileno.`,
+          motivo: 'Ruta invalida: el puerto de origen y destino no pueden ser iguales.',
+        });
+        continue;
+      }
+
+      if (!TIPOS_CONTENEDOR.includes(fila.tipo)) {
+        resumen.omitidas += 1;
+        resumen.errores.push({
+          fila: numeroFila,
+          motivo: `tipo_contenedor invalido: "${fila.tipo}"`,
         });
         continue;
       }

@@ -1,17 +1,8 @@
 /**
  * pages/Puertos.jsx
  * -----------------------------------------------------------------
- * Mantenedor de puertos del catalogo (origen y destino).
+ * Mantenedor moderno y responsive de puertos del catalogo (origen y destino).
  * Reservado exclusivamente para Jefatura Comex (ADMIN_COMEX).
- *
- * Permite:
- *  1. Visualizar todos los puertos registrados con metricas de tarifas y cotizaciones.
- *  2. Agregar nuevos puertos de origen (o destino) con codigo UN/LOCODE.
- *  3. Configurar opcionalmente una tarifa inicial para que el puerto quede activo
- *     y disponible para cotizar de inmediato en el formulario principal.
- *  4. Modificar datos basicos de puertos existentes.
- *  5. Eliminar puertos no referenciados en cotizaciones historicas
- *     (proteccion estricta de integridad contable y auditoria).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -23,20 +14,18 @@ import {
   Cargador,
   Insignia,
   ModalConfirmacion,
-  Stat,
   Vacio,
 } from '../components/Comunes';
 import {
   REGIONES,
   claseRegion,
   formatearEntero,
-  formatearUSD,
 } from '../utils/formato';
 
 const REGIONES_OPCIONES = [
   { id: 'CHINA', etiqueta: 'Asia - China' },
   { id: 'EUROPA', etiqueta: 'Europa' },
-  { id: 'AMERICA', etiqueta: 'America' },
+  { id: 'AMERICA', etiqueta: 'América' },
   { id: 'CHILE', etiqueta: 'Chile' },
 ];
 
@@ -55,7 +44,7 @@ export default function Puertos() {
   const [destinosCatalogo, setDestinosCatalogo] = useState([]);
   const [cargando, setCargando] = useState(true);
 
-  // --- Filtros ---
+  // --- Filtros reactivos ---
   const [busqueda, setBusqueda] = useState('');
   const [filtroRegion, setFiltroRegion] = useState('TODAS');
   const [filtroEstado, setFiltroEstado] = useState('TODOS');
@@ -135,13 +124,14 @@ export default function Puertos() {
     const total = puertos.length;
     const conTarifaOrigen = puertos.filter((p) => Number(p.total_tarifas_origen) > 0).length;
     const conTarifaDestino = puertos.filter((p) => Number(p.total_tarifas_destino) > 0).length;
+    const sinTarifas = total - conTarifaOrigen;
     const regionesUnicas = new Set(puertos.map((p) => p.region)).size;
 
-    return { total, conTarifaOrigen, conTarifaDestino, regionesUnicas };
+    return { total, conTarifaOrigen, conTarifaDestino, sinTarifas, regionesUnicas };
   }, [puertos]);
 
   // ==================================================================
-  // Filtrado de la tabla
+  // Filtrado de la lista
   // ==================================================================
   const puertosFiltrados = useMemo(() => {
     const termino = busqueda.trim().toLowerCase();
@@ -288,24 +278,28 @@ export default function Puertos() {
 
   return (
     <div className="contenedor">
-      {/* ================= ENCABEZADO DE PAGINA ================= */}
-      <div className="encabezado-seccion">
-        <div>
-          <h1 className="encabezado-seccion__titulo">Mantenedor de Puertos</h1>
-          <p className="encabezado-seccion__subtitulo">
-            Gestion del catalogo de puertos de origen y destino. Permite dar de alta
-            nuevos puertos para cotizaciones de importacion Comex.
+      {/* ================= ENCABEZADO DE PAGINA MODERNO ================= */}
+      <div className="puertos-encabezado">
+        <div className="puertos-encabezado__info">
+          <h1 className="puertos-encabezado__titulo">
+            <span className="puertos-encabezado__icono" aria-hidden="true">⚓</span>
+            Mantenedor de Puertos
+          </h1>
+          <p className="puertos-encabezado__desc">
+            Administración del catálogo de puertos de origen y destino. Permite dar de alta
+            nuevas terminales marítimas y habilitarlas de inmediato para el cotizador.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 'var(--esp-3)', alignItems: 'center' }}>
-          <Insignia variante="admin">Acceso exclusivo Jefatura Comex</Insignia>
+        <div className="puertos-encabezado__acciones">
+          <Insignia variante="admin">Jefatura Comex</Insignia>
           <button
             type="button"
             className="boton boton--principal"
             onClick={abrirModalCrear}
+            style={{ boxShadow: 'var(--sombra-terracota)' }}
           >
-            + Nuevo Puerto de Origen
+            <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span> Nuevo Puerto de Origen
           </button>
         </div>
       </div>
@@ -314,7 +308,7 @@ export default function Puertos() {
       {error && (
         <Alerta
           tipo="error"
-          titulo="Error en la operacion"
+          titulo="Error en la operación"
           detalle={error.detalle}
           onCerrar={() => setError(null)}
         >
@@ -328,71 +322,77 @@ export default function Puertos() {
         </Alerta>
       )}
 
-      {/* ================= METRICAS DEL CATALOGO ================= */}
-      <div className="resumen-metricas">
-        <Stat
-          etiqueta="Total de Puertos"
-          valor={formatearEntero(metricas.total)}
-          detalle="Puertos en la base de datos"
-          variante="neutro"
-        />
-        <Stat
-          etiqueta="Origenes con Tarifa"
-          valor={formatearEntero(metricas.conTarifaOrigen)}
-          detalle="Disponibles en el Cotizador"
-          variante="exito"
-        />
-        <Stat
-          etiqueta="Destinos Operativos"
-          valor={formatearEntero(metricas.conTarifaDestino)}
-          detalle="Puertos de llegada configurados"
-          variante="info"
-        />
-        <Stat
-          etiqueta="Regiones Cubiertas"
-          valor={formatearEntero(metricas.regionesUnicas)}
-          detalle="China, Europa, America, Chile"
-          variante="acento"
-        />
+      {/* ================= METRICAS MODERNAS EN REJILLA RESPONSIVE ================= */}
+      <div className="rejilla-stats-moderna">
+        <div className="stat-moderno">
+          <div className="stat-moderno__icono stat-moderno__icono--naranjo">
+            ⚓
+          </div>
+          <div className="stat-moderno__datos">
+            <div className="stat-moderno__etiqueta">Total Puertos</div>
+            <div className="stat-moderno__valor">{formatearEntero(metricas.total)}</div>
+            <div className="stat-moderno__detalle">Catálogo en Neon DB</div>
+          </div>
+        </div>
+
+        <div className="stat-moderno">
+          <div className="stat-moderno__icono stat-moderno__icono--verde">
+            🚢
+          </div>
+          <div className="stat-moderno__datos">
+            <div className="stat-moderno__etiqueta">Orígenes con Tarifa</div>
+            <div className="stat-moderno__valor">{formatearEntero(metricas.conTarifaOrigen)}</div>
+            <div className="stat-moderno__detalle">Listos para cotizar</div>
+          </div>
+        </div>
+
+        <div className="stat-moderno">
+          <div className="stat-moderno__icono stat-moderno__icono--azul">
+            📍
+          </div>
+          <div className="stat-moderno__datos">
+            <div className="stat-moderno__etiqueta">Destinos Operativos</div>
+            <div className="stat-moderno__valor">{formatearEntero(metricas.conTarifaDestino)}</div>
+            <div className="stat-moderno__detalle">Chile y Callao (Perú)</div>
+          </div>
+        </div>
+
+        <div className="stat-moderno">
+          <div className="stat-moderno__icono stat-moderno__icono--morado">
+            🌐
+          </div>
+          <div className="stat-moderno__datos">
+            <div className="stat-moderno__etiqueta">Regiones Activas</div>
+            <div className="stat-moderno__valor">{formatearEntero(metricas.regionesUnicas)}</div>
+            <div className="stat-moderno__detalle">Asia, Europa, América, Chile</div>
+          </div>
+        </div>
       </div>
 
-      {/* ================= TABLA Y FILTROS ================= */}
-      <div className="tarjeta">
-        <div className="tarjeta__encabezado" style={{ flexDirection: 'column', gap: 'var(--esp-3)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-            <h2 className="tarjeta__titulo" style={{ margin: 0, border: 'none' }}>
-              Catálogo de Puertos Registrados
-            </h2>
-            <span style={{ fontSize: 'var(--texto-xs)', color: 'var(--gris-claro)' }}>
-              Mostrando {puertosFiltrados.length} de {puertos.length} puertos
-            </span>
-          </div>
-
-          {/* Barra de filtros */}
-          <div
-            style={{
-              display: 'flex',
-              gap: 'var(--esp-3)',
-              width: '100%',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-            }}
-          >
-            <div style={{ flex: '1 1 240px', minWidth: '220px' }}>
+      {/* ================= TARJETA PRINCIPAL CON FILTROS Y TABLA ================= */}
+      <div className="tarjeta" style={{ overflow: 'hidden' }}>
+        {/* Barra de Filtros */}
+        <div className="barra-filtros-puertos">
+          <div className="barra-filtros-puertos__fila">
+            {/* Buscador interactivo */}
+            <div className="buscador-puertos-wrapper">
+              <span className="buscador-icono" aria-hidden="true">🔍</span>
               <input
                 type="search"
                 className="control"
-                placeholder="Buscar por nombre, código UN/LOCODE o país..."
+                placeholder="Buscar por puerto, país o código UN/LOCODE..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
               />
             </div>
 
-            <div style={{ minWidth: '160px' }}>
+            {/* Selector de Region */}
+            <div style={{ minWidth: '170px' }}>
               <select
                 className="control"
                 value={filtroRegion}
                 onChange={(e) => setFiltroRegion(e.target.value)}
+                style={{ fontSize: 'var(--texto-xs)', height: '38px' }}
               >
                 <option value="TODAS">Todas las regiones</option>
                 {REGIONES_OPCIONES.map((reg) => (
@@ -402,17 +402,36 @@ export default function Puertos() {
                 ))}
               </select>
             </div>
+          </div>
 
-            <div style={{ minWidth: '170px' }}>
-              <select
-                className="control"
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
+          {/* Segunda fila: Filtros rápidos tipo Pills y contador */}
+          <div className="barra-filtros-puertos__fila" style={{ marginTop: 'var(--esp-1)' }}>
+            <div className="barra-filtros-puertos__pills">
+              <button
+                type="button"
+                className={`filtro-pill ${filtroEstado === 'TODOS' ? 'filtro-pill--activo' : ''}`}
+                onClick={() => setFiltroEstado('TODOS')}
               >
-                <option value="TODOS">Todos los estados</option>
-                <option value="CON_TARIFA">Listos para cotizar</option>
-                <option value="SIN_TARIFA">Sin tarifas asignadas</option>
-              </select>
+                Todos ({metricas.total})
+              </button>
+              <button
+                type="button"
+                className={`filtro-pill ${filtroEstado === 'CON_TARIFA' ? 'filtro-pill--activo' : ''}`}
+                onClick={() => setFiltroEstado('CON_TARIFA')}
+              >
+                Listos para cotizar ({metricas.conTarifaOrigen})
+              </button>
+              <button
+                type="button"
+                className={`filtro-pill ${filtroEstado === 'SIN_TARIFA' ? 'filtro-pill--activo' : ''}`}
+                onClick={() => setFiltroEstado('SIN_TARIFA')}
+              >
+                Sin tarifas ({metricas.sinTarifas})
+              </button>
+            </div>
+
+            <div style={{ fontSize: 'var(--texto-xs)', color: 'var(--gris-claro)', fontWeight: 600 }}>
+              Mostrando {puertosFiltrados.length} de {puertos.length} puertos
             </div>
           </div>
         </div>
@@ -425,107 +444,198 @@ export default function Puertos() {
             titulo="No se encontraron puertos"
           >
             {busqueda || filtroRegion !== 'TODAS' || filtroEstado !== 'TODOS'
-              ? 'No hay puertos que coincidan con los filtros aplicados.'
-              : 'No hay puertos registrados en el sistema.'}
+              ? 'No hay registros que coincidan con los criterios de búsqueda o filtros aplicados.'
+              : 'No hay puertos registrados en la base de datos.'}
           </Vacio>
         ) : (
-          <div className="tabla-envoltorio">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Puerto</th>
-                  <th>País</th>
-                  <th>Región</th>
-                  <th>Tarifas de Origen</th>
-                  <th>Tarifas de Destino</th>
-                  <th style={{ textAlign: 'center' }}>Cotizaciones</th>
-                  <th style={{ textAlign: 'right' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {puertosFiltrados.map((p) => {
-                  const tarifasOrigen = Number(p.total_tarifas_origen || 0);
-                  const tarifasDestino = Number(p.total_tarifas_destino || 0);
-                  const cotizaciones = Number(p.total_cotizaciones || 0);
-                  const tieneHistorial = cotizaciones > 0;
+          <>
+            {/* ===== VISTA DE ESCRITORIO: TABLA MODERNA ===== */}
+            <div className="tabla-envoltorio tabla-envoltorio--escritorio">
+              <table className="tabla--puertos">
+                <thead>
+                  <tr>
+                    <th style={{ width: '120px' }}>Código</th>
+                    <th>Puerto y País</th>
+                    <th>Región</th>
+                    <th>Tarifas de Origen</th>
+                    <th>Tarifas de Destino</th>
+                    <th style={{ textAlign: 'center', width: '110px' }}>Cotizaciones</th>
+                    <th style={{ textAlign: 'right', width: '170px' }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {puertosFiltrados.map((p) => {
+                    const tarifasOrigen = Number(p.total_tarifas_origen || 0);
+                    const tarifasDestino = Number(p.total_tarifas_destino || 0);
+                    const cotizaciones = Number(p.total_cotizaciones || 0);
+                    const tieneHistorial = cotizaciones > 0;
 
-                  return (
-                    <tr key={p.id}>
-                      <td>
-                        <code className="codigo-locode">{p.codigo}</code>
-                      </td>
-                      <td>
-                        <strong>{p.nombre}</strong>
-                      </td>
-                      <td>{p.pais_origen}</td>
-                      <td>
-                        <Insignia variante={claseRegion(p.region)}>
-                          {REGIONES[p.region] ?? p.region}
-                        </Insignia>
-                      </td>
-                      <td>
-                        {tarifasOrigen > 0 ? (
-                          <Insignia variante="exito">
-                            {tarifasOrigen} {tarifasOrigen === 1 ? 'ruta vigente' : 'rutas vigentes'}
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <span className="badge-codigo-locode">{p.codigo}</span>
+                        </td>
+                        <td>
+                          <div className="puerto-celda-nombre">
+                            <strong>{p.nombre}</strong>
+                            <span className="puerto-celda-pais">
+                              <span style={{ opacity: 0.6 }}>📍</span> {p.pais_origen}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <Insignia variante={claseRegion(p.region)}>
+                            {REGIONES[p.region] ?? p.region}
                           </Insignia>
-                        ) : (
-                          <Insignia variante="advertencia">Sin tarifas (inactivo)</Insignia>
-                        )}
-                      </td>
-                      <td>
-                        {tarifasDestino > 0 ? (
-                          <span style={{ fontSize: 'var(--texto-sm)' }}>
-                            {tarifasDestino} destino(s)
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--gris-claro)', fontSize: 'var(--texto-sm)' }}>
-                            —
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {tieneHistorial ? (
-                          <span className="tabla__numero" title="Cotizaciones registradas">
-                            {cotizaciones}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--gris-claro)', fontSize: 'var(--texto-sm)' }}>
-                            0
-                          </span>
-                        )}
-                      </td>
-                      <td className="tabla__acciones">
-                        <div className="acciones-fila" style={{ justifyContent: 'flex-end' }}>
-                          <button
-                            type="button"
-                            className="boton boton--secundario boton--pequeno"
-                            onClick={() => abrirModalEditar(p)}
-                          >
-                            Editar
-                          </button>
+                        </td>
+                        <td>
+                          {tarifasOrigen > 0 ? (
+                            <span className="tarifa-badge-status tarifa-badge-status--activo">
+                              <span className="tarifa-badge-punto tarifa-badge-punto--verde" />
+                              {tarifasOrigen} {tarifasOrigen === 1 ? 'ruta vigente' : 'rutas vigentes'}
+                            </span>
+                          ) : (
+                            <span className="tarifa-badge-status tarifa-badge-status--inactivo">
+                              <span className="tarifa-badge-punto tarifa-badge-punto--naranjo" />
+                              Sin tarifas (inactivo)
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {tarifasDestino > 0 ? (
+                            <span style={{ fontSize: 'var(--texto-xs)', color: 'var(--gris-medio)', fontWeight: 600 }}>
+                              {tarifasDestino} destino(s)
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--gris-humo)', fontSize: 'var(--texto-xs)' }}>
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {tieneHistorial ? (
+                            <span
+                              className="insignia insignia--neutro"
+                              style={{ fontWeight: 700 }}
+                              title="Cotizaciones registradas en la bitácora contable"
+                            >
+                              {cotizaciones}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--gris-humo)', fontSize: 'var(--texto-xs)' }}>
+                              0
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="acciones-puerto">
+                            <button
+                              type="button"
+                              className="boton-accion"
+                              onClick={() => abrirModalEditar(p)}
+                              title="Editar datos del puerto"
+                            >
+                              ✏️ Editar
+                            </button>
 
-                          <button
-                            type="button"
-                            className="boton boton--peligro boton--pequeno"
-                            disabled={tieneHistorial}
-                            title={
-                              tieneHistorial
-                                ? 'No se puede eliminar: el puerto está referenciado en cotizaciones históricas contables.'
-                                : 'Eliminar puerto del catálogo'
-                            }
-                            onClick={() => setPuertoPorEliminar(p)}
-                          >
-                            Eliminar
-                          </button>
+                            <button
+                              type="button"
+                              className="boton-accion boton-accion--peligro"
+                              disabled={tieneHistorial}
+                              title={
+                                tieneHistorial
+                                  ? 'No se puede eliminar: el puerto está referenciado en cotizaciones contables históricas.'
+                                  : 'Eliminar este puerto'
+                              }
+                              onClick={() => setPuertoPorEliminar(p)}
+                            >
+                              🗑️ Eliminar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ===== VISTA MOVIL: TARJETAS RESPONSIVE (PANTALLAS <= 820px) ===== */}
+            <div className="rejilla-puertos-movil">
+              {puertosFiltrados.map((p) => {
+                const tarifasOrigen = Number(p.total_tarifas_origen || 0);
+                const cotizaciones = Number(p.total_cotizaciones || 0);
+                const tieneHistorial = cotizaciones > 0;
+
+                return (
+                  <div key={p.id} className="puerto-tarjeta-movil">
+                    <div className="puerto-tarjeta-movil__cabecera">
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--esp-2)', marginBottom: '4px' }}>
+                          <span className="badge-codigo-locode">{p.codigo}</span>
+                          <strong style={{ fontSize: 'var(--texto-md)' }}>{p.nombre}</strong>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <span style={{ fontSize: 'var(--texto-xs)', color: 'var(--gris-claro)' }}>
+                          📍 {p.pais_origen}
+                        </span>
+                      </div>
+                      <Insignia variante={claseRegion(p.region)}>
+                        {REGIONES[p.region] ?? p.region}
+                      </Insignia>
+                    </div>
+
+                    <div className="puerto-tarjeta-movil__detalles">
+                      <div>
+                        <div style={{ color: 'var(--gris-claro)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                          Estado Tarifas
+                        </div>
+                        <div style={{ marginTop: '2px' }}>
+                          {tarifasOrigen > 0 ? (
+                            <span style={{ color: 'var(--exito)', fontWeight: 700 }}>
+                              ✓ {tarifasOrigen} ruta(s) activa(s)
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--advertencia)', fontWeight: 650 }}>
+                              ⚠ Sin tarifas
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ color: 'var(--gris-claro)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                          Historial Comex
+                        </div>
+                        <div style={{ marginTop: '2px', fontWeight: 650 }}>
+                          {cotizaciones} cotización(es)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="puerto-tarjeta-movil__acciones">
+                      <button
+                        type="button"
+                        className="boton boton--secundario boton--pequeno"
+                        onClick={() => abrirModalEditar(p)}
+                      >
+                        ✏️ Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        className="boton boton--peligro boton--pequeno"
+                        disabled={tieneHistorial}
+                        onClick={() => setPuertoPorEliminar(p)}
+                        title={tieneHistorial ? 'No se puede eliminar: tiene cotizaciones' : 'Eliminar'}
+                      >
+                        🗑️ Eliminar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -543,16 +653,16 @@ export default function Puertos() {
             aria-modal="true"
           >
             <div className="modal__cabecera">
-              <span style={{ fontSize: 'var(--texto-base)', fontWeight: 700 }}>
-                Agregar Nuevo Puerto de Origen
+              <span style={{ fontSize: 'var(--texto-base)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚓</span> Agregar Nuevo Puerto de Origen
               </span>
             </div>
 
             <form onSubmit={manejarCrear}>
               <div className="modal__cuerpo" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--esp-4)' }}>
-                <p style={{ margin: 0, fontSize: 'var(--texto-sm)', color: 'var(--gris-medio)' }}>
-                  Ingrese los datos oficiales del puerto. Para que esté disponible inmediatamente en
-                  el cotizador, puede configurar una tarifa de flete inicial.
+                <p style={{ margin: 0, fontSize: 'var(--texto-sm)', color: 'var(--gris-medio)', lineHeight: 1.4 }}>
+                  Ingrese los datos oficiales de la terminal portuaria. Puede configurar de inmediato
+                  una tarifa inicial hacia Chile para que quede disponible en el Cotizador.
                 </p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--esp-3)' }}>
@@ -572,13 +682,13 @@ export default function Puertos() {
                     etiqueta="Código UN/LOCODE"
                     htmlFor="nuevo-codigo"
                     requerido
-                    ayuda="5 caracteres estándar internacional"
+                    ayuda="Código internacional (ej. CNNGB)"
                   >
                     <input
                       id="nuevo-codigo"
                       type="text"
                       className="control"
-                      placeholder="Ej. CNNGB, KRPUS"
+                      placeholder="Ej. CNNGB"
                       maxLength={12}
                       value={nuevoForm.codigo}
                       onChange={(e) => setNuevoForm({ ...nuevoForm, codigo: e.target.value.toUpperCase() })}
@@ -588,7 +698,7 @@ export default function Puertos() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--esp-3)' }}>
-                  <Campo etiqueta="País" htmlFor="nuevo-pais" requerido>
+                  <Campo etiqueta="País de Origen" htmlFor="nuevo-pais" requerido>
                     <input
                       id="nuevo-pais"
                       type="text"
@@ -624,7 +734,7 @@ export default function Puertos() {
                       checked={nuevoForm.incluirTarifa}
                       onChange={(e) => setNuevoForm({ ...nuevoForm, incluirTarifa: e.target.checked })}
                     />
-                    <span>Configurar tarifa inicial para activar de inmediato en el Cotizador</span>
+                    <span>Activar inmediatamente en Cotizador con tarifa inicial</span>
                   </label>
 
                   {nuevoForm.incluirTarifa ? (
@@ -637,7 +747,7 @@ export default function Puertos() {
                           onChange={(e) => setNuevoForm({ ...nuevoForm, puerto_destino_id: e.target.value })}
                           required={nuevoForm.incluirTarifa}
                         >
-                          <option value="">Seleccione destino...</option>
+                          <option value="">Seleccione puerto de llegada...</option>
                           {destinosCatalogo.map((d) => (
                             <option key={d.id} value={d.id}>
                               {d.nombre} ({d.pais_origen}) [{d.codigo}]
@@ -670,7 +780,7 @@ export default function Puertos() {
                           </select>
                         </Campo>
 
-                        <Campo etiqueta="Tarifa Flete (USD)" htmlFor="tarifa-precio" requerido sufijo="USD">
+                        <Campo etiqueta="Tarifa Flete" htmlFor="tarifa-precio" requerido sufijo="USD">
                           <input
                             id="tarifa-precio"
                             type="number"
@@ -699,8 +809,8 @@ export default function Puertos() {
                     </div>
                   ) : (
                     <p style={{ margin: 'var(--esp-2) 0 0', fontSize: 'var(--texto-xs)', color: 'var(--gris-claro)' }}>
-                      El puerto se guardará en el catálogo. Permanecerá inactivo en el Cotizador hasta
-                      que cargue una planilla de tarifas o defina una ruta para él.
+                      El puerto quedará registrado en el catálogo pero inactivo en el Cotizador hasta
+                      que le asigne una tarifa de ruta en la sección de Tarifas.
                     </p>
                   )}
                 </div>
@@ -813,7 +923,7 @@ export default function Puertos() {
                   className="boton boton--principal"
                   disabled={guardando}
                 >
-                  {guardando ? <span className="boton__spinner" /> : 'Actualizar'}
+                  {guardando ? <span className="boton__spinner" /> : 'Guardar Cambios'}
                 </button>
               </div>
             </form>
@@ -836,8 +946,8 @@ export default function Puertos() {
             <strong>{puertoPorEliminar.nombre} ({puertoPorEliminar.codigo})</strong>?
           </p>
           <p style={{ marginTop: '0.5rem', color: 'var(--gris-claro)', fontSize: 'var(--texto-xs)' }}>
-            Esta acción eliminará el puerto y las tarifas de ruta asociadas directamente. No se
-            puede deshacer.
+            Esta acción eliminará el puerto y sus tarifas asociadas si no posee cotizaciones
+            históricas registradas.
           </p>
         </ModalConfirmacion>
       )}

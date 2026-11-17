@@ -197,3 +197,77 @@ export const esquemaCambioActivo = z
 // Parametros :id de las rutas de usuarios
 // ------------------------------------------------------------------
 export const esquemaIdUsuario = z.object({ id: idPositivo });
+
+// ------------------------------------------------------------------
+// Parametros :id de las rutas de puertos
+// ------------------------------------------------------------------
+export const esquemaIdPuerto = z.object({ id: idPositivo });
+
+// ------------------------------------------------------------------
+// POST /api/v1/puertos  (Crear nuevo puerto de origen/destino)
+// ------------------------------------------------------------------
+export const esquemaCrearPuerto = z
+  .object({
+    nombre: z
+      .string({ message: 'El nombre del puerto es obligatorio.' })
+      .trim()
+      .min(2, 'El nombre debe tener al menos 2 caracteres.')
+      .max(160, 'El nombre es demasiado largo.'),
+    pais_origen: z
+      .string({ message: 'El pais de origen es obligatorio.' })
+      .trim()
+      .min(2, 'El pais debe tener al menos 2 caracteres.')
+      .max(80, 'El pais es demasiado largo.'),
+    region: z.enum(['CHINA', 'EUROPA', 'AMERICA', 'CHILE'], {
+      message: 'Region no valida. Valores permitidos: CHINA, EUROPA, AMERICA, CHILE.',
+    }),
+    codigo: z
+      .string({ message: 'El codigo UN/LOCODE es obligatorio.' })
+      .trim()
+      .toUpperCase()
+      .min(2, 'El codigo debe tener al menos 2 caracteres.')
+      .max(12, 'El codigo no puede superar 12 caracteres.')
+      .regex(/^[A-Z0-9]+$/, 'El codigo debe contener solo letras y numeros sin espacios.'),
+    tarifa_inicial: z
+      .object({
+        puerto_destino_id: idPositivo,
+        tipo_contenedor: z.enum([...TIPOS_CONTENEDOR]).default('40HC'),
+        precio_usd: numeroPositivo('El precio de la tarifa inicial', 1_000_000),
+        dias_viaje_base: z.coerce
+          .number({ message: 'Los dias de viaje base deben ser numericos.' })
+          .int('Los dias de viaje deben ser enteros.')
+          .min(1, 'Los dias de viaje deben ser al menos 1.')
+          .max(180, 'Los dias de viaje no pueden superar 180.'),
+        capacidad_max_tn: z.coerce.number().positive().default(25),
+      })
+      .optional(),
+  })
+  .strict('Campos no esperados en la solicitud.');
+
+// ------------------------------------------------------------------
+// PUT /api/v1/puertos/:id  (Editar puerto existente)
+// ------------------------------------------------------------------
+export const esquemaEditarPuerto = z
+  .object({
+    nombre: z
+      .string({ message: 'El nombre del puerto es obligatorio.' })
+      .trim()
+      .min(2, 'El nombre debe tener al menos 2 caracteres.')
+      .max(160, 'El nombre es demasiado largo.'),
+    pais_origen: z
+      .string({ message: 'El pais de origen es obligatorio.' })
+      .trim()
+      .min(2, 'El pais debe tener al menos 2 caracteres.')
+      .max(80, 'El pais es demasiado largo.'),
+    region: z.enum(['CHINA', 'EUROPA', 'AMERICA', 'CHILE'], {
+      message: 'Region no valida. Valores permitidos: CHINA, EUROPA, AMERICA, CHILE.',
+    }),
+    codigo: z
+      .string({ message: 'El codigo UN/LOCODE es obligatorio.' })
+      .trim()
+      .toUpperCase()
+      .min(2, 'El codigo debe tener al menos 2 caracteres.')
+      .max(12, 'El codigo no puede superar 12 caracteres.')
+      .regex(/^[A-Z0-9]+$/, 'El codigo debe contener solo letras y numeros sin espacios.'),
+  })
+  .strict('Campos no esperados en la solicitud.');

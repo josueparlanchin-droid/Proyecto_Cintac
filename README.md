@@ -181,7 +181,11 @@ para 20 pies y **970 USD** para 40 pies.
 | `GET` | `/usuarios` | Jefatura | Cuentas con su bitácora de acciones |
 | `PATCH` | `/usuarios/:id/rol` | Jefatura | Promueve o degrada entre Analista y Administrador |
 | `PATCH` | `/usuarios/:id/activo` | Jefatura | Da de baja o reactiva una cuenta |
-| `GET` | `/puertos` | Autenticado | Puertos disponibles |
+| `GET` | `/puertos` | Autenticado | Puertos disponibles para cotización |
+| `GET` | `/puertos/admin` | Jefatura | Mantenedor de puertos con métricas de tarifas y uso |
+| `POST` | `/puertos` | Jefatura | Alta de nuevo puerto con opción de tarifa inicial |
+| `PUT` | `/puertos/:id` | Jefatura | Edición de datos básicos del puerto |
+| `DELETE` | `/puertos/:id` | Jefatura | Elimina puerto (protegido si tiene historial contable) |
 | `POST` | `/cotizaciones/calcular` | Autenticado | Simula una cotización |
 | `GET` | `/cotizaciones/historial` | Autenticado | Historial con filtros y paginación |
 | `GET` | `/cotizaciones/resumen` | Autenticado | Métricas agregadas |
@@ -282,6 +286,20 @@ precio en vez de duplicar. Se aceptan rutas internacionales → Chile y
 Chile → Callao. Las filas inválidas se omiten y se informan al usuario en
 lugar de abortar toda la carga. Hay una plantilla descargable en
 `frontend/public/plantilla-tarifas.csv`.
+
+## Mantenedor de puertos (Jefatura Comex)
+
+La pantalla **Puertos** (`/puertos`), accesible solo para cuentas con rol `ADMIN_COMEX`,
+permite administrar el catálogo oficial de puertos:
+
+- **Alta de puertos de origen/destino:** Registro de nombre, país, región geográfica
+  (`CHINA`, `EUROPA`, `AMERICA`, `CHILE`) y código UN/LOCODE internacional (ej. `CNNGB`, `DEHAM`).
+- **Tarifa inicial integrada:** Al dar de alta un puerto, el administrador puede activar
+  opcionalmente una tarifa inicial a un puerto de destino (San Antonio, Valparaíso, etc.),
+  dejándolo inmediatamente cotizable en el formulario sin requerir una importación de planilla posterior.
+- **Edición y filtros:** Búsqueda en vivo por nombre/código/país y filtrado por región y estado tarifario.
+- **Protección contable de borrado:** Si un puerto registra cotizaciones históricas en `cotizaciones_log`,
+  el sistema impide su eliminación protegiendo la integridad referencial y la trazabilidad de auditoría.
 
 ## Selección del contenedor
 

@@ -22,6 +22,7 @@ const ENLACES = [
   { ruta: '/cotizador', etiqueta: 'Cotizador' },
   { ruta: '/historial', etiqueta: 'Historial' },
   { ruta: '/tarifas', etiqueta: 'Tarifas', soloAdmin: true },
+  { ruta: '/puertos', etiqueta: 'Puertos', soloAdmin: true },
   { ruta: '/usuarios', etiqueta: 'Usuarios', soloAdmin: true },
 ];
 

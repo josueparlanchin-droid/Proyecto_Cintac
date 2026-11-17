@@ -1070,6 +1070,30 @@ select.control {
   overflow: hidden;
 }
 
+.modal--amplio {
+  max-width: 560px;
+}
+
+.codigo-locode {
+  font-family: var(--fuente-mono, monospace);
+  font-weight: 700;
+  font-size: var(--texto-xs);
+  background: var(--superficie-alterna);
+  color: var(--terracota-oscuro);
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  letter-spacing: 0.05em;
+}
+
+.caja-tarifa-inicial {
+  margin-top: var(--esp-4);
+  padding: var(--esp-4);
+  background: var(--superficie-alterna);
+  border: 1px dashed var(--borde);
+  border-radius: var(--radio);
+}
+
 .modal__cabecera {
   padding: var(--esp-4) var(--esp-5);
   border-bottom: 1px solid var(--borde);

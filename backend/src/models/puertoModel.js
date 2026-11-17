@@ -145,3 +145,91 @@ export async function insertarVarios(puertos) {
 
   return puertos.length;
 }
+
+/**
+ * Inserta un nuevo puerto en el catalogo.
+ *
+ * @param {{nombre:string, pais_origen:string, region:string, codigo:string}} puerto
+ * @returns {Promise<object>} El puerto creado con su id asignado.
+ */
+export async function crear({ nombre, pais_origen, region, codigo }) {
+  return queryOne(
+    `INSERT INTO puertos (nombre, pais_origen, region, codigo)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [nombre.trim(), pais_origen.trim(), region.toUpperCase(), codigo.trim().toUpperCase()],
+  );
+}
+
+/**
+ * Actualiza los datos de un puerto existente.
+ *
+ * @param {number} id
+ * @param {{nombre:string, pais_origen:string, region:string, codigo:string}} datos
+ * @returns {Promise<object|null>}
+ */
+export async function actualizar(id, { nombre, pais_origen, region, codigo }) {
+  return queryOne(
+    `UPDATE puertos
+     SET nombre = $1, pais_origen = $2, region = $3, codigo = $4
+     WHERE id = $5
+     RETURNING *`,
+    [nombre.trim(), pais_origen.trim(), region.toUpperCase(), codigo.trim().toUpperCase(), id],
+  );
+}
+
+/**
+ * Cuenta cuantas cotizaciones historicas referencian a un puerto.
+ * Necesario para proteger la integridad referencial antes de un borrado.
+ *
+ * @param {number} id
+ * @returns {Promise<number>}
+ */
+export async function contarCotizaciones(id) {
+  const fila = await queryOne(
+    `SELECT COUNT(*) AS total
+     FROM cotizaciones_log
+     WHERE puerto_origen_id = $1 OR puerto_destino_id = $1`,
+    [id],
+  );
+  return Number(fila?.total ?? 0);
+}
+
+/**
+ * Elimina un puerto por su ID.
+ *
+ * @param {number} id
+ * @returns {Promise<boolean>} true si se elimino la fila.
+ */
+export async function eliminar(id) {
+  const resultado = await query('DELETE FROM puertos WHERE id = $1', [id]);
+  return resultado.rowCount > 0;
+}
+
+/**
+ * Lista todos los puertos con estadisticas de tarifas vigentes y cotizaciones asociadas.
+ * Utilizado por el mantenedor exclusivo de Jefatura Comex.
+ *
+ * @returns {Promise<object[]>}
+ */
+export async function listarConEstadisticas() {
+  return queryAll(`
+    SELECT p.*,
+           COUNT(DISTINCT t_orig.id) AS total_tarifas_origen,
+           COUNT(DISTINCT t_dest.id) AS total_tarifas_destino,
+           COUNT(DISTINCT c.id)      AS total_cotizaciones
+    FROM puertos p
+    LEFT JOIN tarifas_flete t_orig ON t_orig.puerto_origen_id = p.id
+    LEFT JOIN tarifas_flete t_dest ON t_dest.puerto_destino_id = p.id
+    LEFT JOIN cotizaciones_log c   ON (c.puerto_origen_id = p.id OR c.puerto_destino_id = p.id)
+    GROUP BY p.id
+    ORDER BY
+      CASE p.region
+        WHEN 'CHINA'   THEN 1
+        WHEN 'EUROPA'  THEN 2
+        WHEN 'AMERICA' THEN 3
+        WHEN 'CHILE'   THEN 4
+      END,
+      p.nombre ASC
+  `);
+}

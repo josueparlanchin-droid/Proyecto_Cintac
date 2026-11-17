@@ -212,6 +212,19 @@ export const api = {
     return peticion('/tarifas/upload', { metodo: 'POST', formData });
   },
 
+  // --- Mantenedor de puertos (solo ADMIN_COMEX) ---
+  /** GET /puertos/admin */
+  puertosAdmin: () => peticion('/puertos/admin'),
+
+  /** POST /puertos */
+  crearPuerto: (datos) => peticion('/puertos', { metodo: 'POST', cuerpo: datos }),
+
+  /** PUT /puertos/:id */
+  actualizarPuerto: (id, datos) => peticion(`/puertos/${id}`, { metodo: 'PUT', cuerpo: datos }),
+
+  /** DELETE /puertos/:id */
+  eliminarPuerto: (id) => peticion(`/puertos/${id}`, { metodo: 'DELETE' }),
+
   // --- Administracion de cuentas (solo ADMIN_COMEX) ---
   // Se decluran aqui, y no en un segundo cliente, porque la autorizacion ya
   // la aplica el backend en `soloAdmin`: agregar el metodo no es una puerta

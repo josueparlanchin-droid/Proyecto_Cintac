@@ -28,6 +28,7 @@ import Registro from './pages/Registro';
 import Cotizador from './pages/Cotizador';
 import Historial from './pages/Historial';
 import Tarifas from './pages/Tarifas';
+import Puertos from './pages/Puertos';
 import Usuarios from './pages/Usuarios';
 
 export default function App() {
@@ -52,6 +53,14 @@ export default function App() {
           element={
             <RutaPorRol soloAdmin>
               <Tarifas />
+            </RutaPorRol>
+          }
+        />
+        <Route
+          path="/puertos"
+          element={
+            <RutaPorRol soloAdmin>
+              <Puertos />
             </RutaPorRol>
           }
         />

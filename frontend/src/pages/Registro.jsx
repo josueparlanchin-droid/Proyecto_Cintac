@@ -121,7 +121,9 @@ export default function Registro() {
     <div className="acceso">
       <div className="acceso__caja acceso__caja--ancha">
         <div className="acceso__cabecera">
-          <div className="acceso__logo" aria-hidden="true">C</div>
+          <div className="acceso__logo" aria-hidden="true">
+            <img src="/logo-cintac.jpg" alt="" />
+          </div>
           <h1 className="acceso__empresa">CINTAC S.A.</h1>
           <p className="acceso__modulo">
             Alta de Analista Comex

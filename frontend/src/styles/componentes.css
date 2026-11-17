@@ -41,16 +41,21 @@
 .barra__marca:hover { color: var(--blanco); }
 
 .barra__logo {
-  width: 34px;
-  height: 34px;
+  width: 160px;
+  height: 40px;
+  padding: 6px 10px;
   border-radius: var(--radio);
   background: var(--blanco);
-  color: var(--terracota);
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: var(--texto-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+}
+
+.barra__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .barra__titulo {
@@ -1007,16 +1012,21 @@ select.control {
 }
 
 .acceso__logo {
-  width: 56px;
-  height: 56px;
+  width: min(220px, 100%);
+  height: 58px;
+  padding: 10px 16px;
   border-radius: var(--radio-lg);
   background: var(--blanco);
-  color: var(--terracota);
-  display: grid;
-  place-items: center;
-  font-size: var(--texto-xl);
-  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin: 0 auto var(--esp-4);
+}
+
+.acceso__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .acceso__empresa {

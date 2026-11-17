@@ -40,11 +40,17 @@ export default function Layout() {
     <>
       <header className="barra">
         <div className="barra__contenido">
-          <NavLink to="/cotizador" className="barra__marca">
-            <span className="barra__logo" aria-hidden="true">C</span>
+          <NavLink
+            to="/cotizador"
+            className="barra__marca"
+            aria-label="Cintac S.A. - Cotizador Logistico de Importaciones Comex"
+          >
+            <span className="barra__logo" aria-hidden="true">
+              <img src="/logo-cintac.jpg" alt="" />
+            </span>
             <span>
-              <span className="barra__titulo">Cintac S.A.</span>
-              <span className="barra__subtitulo">Cotizador Logistico de Importaciones</span>
+              <span className="barra__titulo">Cotizador Logistico</span>
+              <span className="barra__subtitulo">de Importaciones Comex</span>
             </span>
           </NavLink>
 

@@ -60,7 +60,9 @@ export default function Login() {
     <div className="acceso">
       <div className="acceso__caja">
         <div className="acceso__cabecera">
-          <div className="acceso__logo" aria-hidden="true">C</div>
+          <div className="acceso__logo" aria-hidden="true">
+            <img src="/logo-cintac.jpg" alt="" />
+          </div>
           <h1 className="acceso__empresa">CINTAC S.A.</h1>
           <p className="acceso__modulo">
             Cotizador Logistico<br />

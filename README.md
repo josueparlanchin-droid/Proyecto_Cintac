@@ -293,6 +293,21 @@ flete total**. El desempate es: menos contenedores, luego mayor capacidad
 
 Desde la interfaz, el cotizador usa **Automático** por defecto. En
 **Opciones avanzadas** se puede forzar 20 pies (23 tn) o 40 pies (25 tn).
+Cuando la ruta solo tiene una tarifa, el panel lo informa como la única opción
+disponible: no significa que el peso haya activado un tipo High Cube ni que el
+sistema haya inventado una tarifa de 20 pies.
+
+Ejemplo para **San Antonio → Callao**, donde existen ambas tarifas:
+
+| Peso | Alternativa 20 pies | Alternativa 40 pies | Selección |
+|---|---|---|---|
+| 18.000 kg | 1 × 900 = USD 900 | 1 × 970 = USD 970 | 1 × 20 pies |
+| 24.000 kg | 2 × 900 = USD 1.800 | 1 × 970 = USD 970 | 1 × 40 pies |
+| 50.000 kg | 3 × 900 = USD 2.700 | 2 × 970 = USD 1.940 | 2 × 40 pies |
+
+Las rutas internacionales del seed que solo tienen `40HC` usan ese tipo incluso
+con 18 tn. La selección por tonelaje no reemplaza la tarifa: si se desea
+comparar 20 pies en esas rutas, primero hay que cargar su tarifa real.
 
 ## Verificación
 
@@ -305,11 +320,11 @@ npm run verificar:api    # solo la API
 ```
 
 - `frontend/scripts/verificar-frontend.js` maneja Chrome Headless por el
-  protocolo DevTools y comprueba 63 casos reales de interfaz: montaje, login,
+  protocolo DevTools y comprueba 69 casos reales de interfaz: montaje, login,
   conversión kg→tn en vivo, cálculo, PDF, historial, permisos del Analista,
   persistencia de sesión y ausencia de errores en consola.
 - `backend/scripts/verificar-api.js` recorre los endpoints de extremo a extremo y
-  comprueba 120 casos, incluidos los límites de 23 tn (20 pies) y 25 tn
+  comprueba 123 casos, incluidos los límites de 23 tn (20 pies) y 25 tn
   (40 pies), la selección automática por costo, las rutas Chile → Callao, el
   registro pendiente de aprobación, el aislamiento por rol y el rate limiting.
 

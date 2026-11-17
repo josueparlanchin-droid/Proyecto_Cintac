@@ -758,6 +758,57 @@ async function main() {
   );
 
   await comprobar(
+    'Automatico: 18.000 kg San Antonio -> Callao elige 20 pies (900 USD)',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 18_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) =>
+      c.datos.tipo_contenedor === '20' &&
+      c.datos.tipo_contenedor_automatico === true &&
+      c.datos.cantidad_contenedores === 1 &&
+      c.datos.costo_flete_usd === 900 &&
+      c.datos.opciones_contenedor?.length === 2,
+    {
+      statusEsperado: 201,
+      mostrar: (c) => `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.costo_flete_usd} USD`,
+    },
+  );
+
+  await comprobar(
+    'Automatico: 50.000 kg San Antonio -> Callao elige 2 x 40 pies (1.940 USD)',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 50_000,
+        puerto_origen_id: SAI,
+        puerto_destino_id: PECLL,
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) =>
+      c.datos.tipo_contenedor === '40' &&
+      c.datos.tipo_contenedor_automatico === true &&
+      c.datos.capacidad_max_tn === 25 &&
+      c.datos.cantidad_contenedores === 2 &&
+      c.datos.costo_flete_usd === 1_940 &&
+      c.datos.opciones_contenedor?.length === 2,
+    {
+      statusEsperado: 201,
+      mostrar: (c) => `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.costo_flete_usd} USD`,
+    },
+  );
+
+  await comprobar(
     'Forzar 20 pies en 24.000 kg mantiene 2 contenedores (1.800 USD)',
     pedir('/cotizaciones/calcular', {
       metodo: 'POST',
@@ -801,6 +852,31 @@ async function main() {
       c.datos.capacidad_max_tn === 25 &&
       c.datos.cantidad_contenedores === 1,
     { statusEsperado: 201, mostrar: (c) => `${c.datos.tipo_contenedor}, ${c.datos.capacidad_max_tn} tn` },
+  );
+
+  await comprobar(
+    'Automatico con una sola tarifa 40HC: 50.000 kg usa 2 contenedores',
+    pedir('/cotizaciones/calcular', {
+      metodo: 'POST',
+      token: tokenAnalista,
+      cuerpo: {
+        peso_kg: 50_000,
+        puerto_origen_id: SHA,
+        puerto_destino_id: VAP,
+        dias_contingencia: 0,
+        guardar: false,
+      },
+    }),
+    (c) =>
+      c.datos.tipo_contenedor === '40HC' &&
+      c.datos.tipo_contenedor_automatico === true &&
+      c.datos.cantidad_contenedores === 2 &&
+      c.datos.costo_flete_usd === 4_900 &&
+      c.datos.opciones_contenedor?.length === 1,
+    {
+      statusEsperado: 201,
+      mostrar: (c) => `${c.datos.cantidad_contenedores} x ${c.datos.tipo_contenedor}, ${c.datos.costo_flete_usd} USD`,
+    },
   );
 
   await comprobar(

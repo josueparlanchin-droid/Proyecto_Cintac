@@ -215,7 +215,9 @@ export default function PanelResultados({ resultado, calculando, contingencia, o
                 fontWeight: '600',
               }}
             >
-              Tipo elegido automaticamente por menor flete.
+              {Array.isArray(opcionesContenedor) && opcionesContenedor.length === 1
+                ? `Tipo ${tipoContenedor} elegido automaticamente porque es la unica tarifa disponible para esta ruta.`
+                : 'Tipo elegido automaticamente por menor flete.'}
             </p>
           )}
 

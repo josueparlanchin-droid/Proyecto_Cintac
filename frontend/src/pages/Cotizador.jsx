@@ -370,7 +370,7 @@ export default function Cotizador() {
                 <Campo
                   etiqueta="Tipo de contenedor"
                   htmlFor="tipo"
-                  ayuda="Automatico compara las tarifas de la ruta y usa el menor flete. Tambien puede forzar 20 o 40 pies."
+                  ayuda="Automatico compara las tarifas disponibles de 20 y 40 pies y usa el menor flete total. Si solo existe una tarifa, utiliza esa opcion. Tambien puede forzar 20 o 40 pies."
                 >
                   <select
                     id="tipo"

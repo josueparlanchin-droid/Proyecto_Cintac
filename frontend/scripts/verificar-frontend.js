@@ -507,6 +507,10 @@ async function main() {
       'El panel indica que el tipo fue elegido automaticamente',
       texto.includes('elegido automaticamente'),
     );
+    comprobar(
+      'El panel explica cuando solo hay una tarifa disponible',
+      texto.includes('unica tarifa disponible'),
+    );
     comprobar('Se muestra el flete maritimo', texto.includes('flete maritimo'));
     comprobar('Se muestra el impuesto de 19% sobre CIF', texto.includes('impuesto 19% cif'));
     comprobar('Se muestra el tiempo de transito', texto.includes('tiempo de transito'));
@@ -547,6 +551,68 @@ async function main() {
 
     const hayFormula = await evaluar(`document.body.innerText.includes('ceil(')`);
     comprobar('Se puede desplegar la base de calculo aplicada', hayFormula === true);
+
+    // Ruta con tarifas para ambos tipos: aqui se comprueba el ejemplo del
+    // negocio, 18 tn -> 1 x 20 pies porque cuesta menos que 1 x 40.
+    await navegar(`${FRONTEND}/cotizador`);
+
+    const seleccionCallao = await evaluar(`
+      (() => {
+        const seleccionar = (id, etiqueta) => {
+          const select = document.getElementById(id);
+          const option = Array.from(select?.options ?? []).find(o => o.textContent.trim() === etiqueta);
+          if (!select || !option) return false;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+          setter.call(select, option.value);
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        };
+        return {
+          origen: seleccionar('origen', 'San Antonio - Chile'),
+          destino: seleccionar('destino', 'Callao - Peru'),
+        };
+      })()
+    `);
+    comprobar(
+      'Se puede seleccionar San Antonio -> Callao',
+      seleccionCallao?.origen === true && seleccionCallao?.destino === true,
+      JSON.stringify(seleccionCallao),
+    );
+
+    await llenar([['peso', '18000']]);
+    await new Promise((r) => setTimeout(r, 400));
+    await evaluar(`
+      Array.from(document.querySelectorAll('button'))
+        .find(b => b.textContent.includes('Calcular cotizacion'))
+        ?.click()
+    `);
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const resultadoCallao = await evaluar(`
+      (() => {
+        const stats = Array.from(document.querySelectorAll('.stat'));
+        const contenedores = stats.find(s => /contenedores/i.test(s.textContent));
+        const flete = stats.find(s => /flete maritimo/i.test(s.textContent));
+        return {
+          texto: document.body.innerText.toLowerCase(),
+          cantidad: contenedores?.querySelector('.stat__valor')?.textContent.trim() ?? '',
+          tipo: contenedores?.querySelector('.stat__detalle')?.textContent.trim() ?? '',
+          flete: flete?.querySelector('.stat__valor')?.textContent.trim() ?? '',
+          comparativa: document.body.textContent.includes('Comparativa de tarifas evaluadas'),
+        };
+      })()
+    `);
+    comprobar(
+      'El panel muestra la ruta San Antonio -> Callao',
+      resultadoCallao?.texto.includes('san antonio') && resultadoCallao?.texto.includes('callao'),
+    );
+    comprobar(
+      '18.000 kg en Callao elige 1 contenedor de 20 pies',
+      resultadoCallao?.cantidad === '1' && /^20\b/.test(resultadoCallao?.tipo ?? ''),
+      `cantidad="${resultadoCallao?.cantidad ?? ''}", tipo="${resultadoCallao?.tipo ?? ''}"`,
+    );
+    comprobar('El flete de 18.000 kg en Callao es USD 900', /900/.test(resultadoCallao?.flete ?? ''), `valor="${resultadoCallao?.flete ?? ''}"`);
+    comprobar('La ruta Callao muestra la comparativa de tarifas', resultadoCallao?.comparativa === true);
 
     // ==================================================================
     console.log('\n7. HISTORIAL Y AISLAMIENTO POR ROL');

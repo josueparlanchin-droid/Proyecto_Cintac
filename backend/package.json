@@ -11,6 +11,7 @@
     "seed": "node src/db/seed.js",
     "db:check": "node scripts/probar-conexion.js",
     "reset": "node scripts/reset-db.js --si",
+    "limpiar:pruebas": "node scripts/limpiar-cuentas-prueba.js",
     "verificar": "node scripts/verificar-api.js"
   },
   "dependencies": {

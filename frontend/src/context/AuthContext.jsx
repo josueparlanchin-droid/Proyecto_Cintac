@@ -88,12 +88,31 @@ export function ProveedorAuth({ children }) {
   /**
    * Alta de cuenta con codigo de invitacion.
    *
-   * Reutiliza el mismo camino que `iniciarSesion` a proposito. La API ya
-   * devuelve token en el registro, asi que la sesion queda abierta sin un
-   * segundo viaje al servidor solo para consequences de permisos.
+   * Hay dos desenlaces y NO se parecen en nada:
+   *
+   *   1. La cuenta queda PENDIENTE de aprobacion (el caso normal). El backend
+   *      responde 201 con `{ pendiente: true }` y SIN token, porque la cuenta
+   *      nace con `activo = FALSE`. Aqui no hay nada que autenticar: se limpia
+   *      cualquier token previo, NO se guarda el `undefined` que vendria en
+   *      `respuesta.datos.token` y NO se pide `/auth/me` (daria 401 y la
+   *      pantalla mostraria un error aunque el alta se haya hecho bien).
+   *
+   *   2. La cuenta nace activa y el backend emite token. Ahi si se abre
+   *      sesion: se guarda el token y se pide el perfil para obtener los
+   *      permisos que la interfaz usa.
+   *
+   * @returns {Promise<{pendiente:boolean}|object>} `{ pendiente: true }` o el
+   *          perfil del usuario recien creado.
    */
   const registrar = useCallback(async (datos) => {
     const respuesta = await api.registro(datos);
+
+    if (respuesta.datos?.pendiente) {
+      borrarToken();
+      setUsuario(null);
+      return { pendiente: true };
+    }
+
     guardarToken(respuesta.datos.token);
 
     const { datos: perfil } = await api.perfil();

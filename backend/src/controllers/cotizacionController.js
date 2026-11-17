@@ -81,9 +81,16 @@ export async function historial(req, res) {
 /**
  * GET /api/v1/cotizaciones/resumen
  * Metricas agregadas para la cabecera de la vista de historial.
+ *
+ * El alcance lo decide el servidor segun el rol, igual que en el listado:
+ * el Analista ve las metricas de SUS cotizaciones y Jefatura ve el total de
+ * la organizacion. Aceptar el id desde el cliente permitiria a un Analista
+ * pedir las metricas de otro, asi que el filtro se inyecta aqui y no se
+ * acepta desde la peticion.
  */
 export async function resumen(req, res) {
-  const metricas = await cotizacionModel.resumen();
+  const usuarioId = req.usuario.rol === 'ADMIN_COMEX' ? null : req.usuario.id;
+  const metricas = await cotizacionModel.resumen(usuarioId);
 
   res.json({
     exito: true,

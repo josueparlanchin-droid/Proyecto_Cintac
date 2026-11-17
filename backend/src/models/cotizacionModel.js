@@ -205,16 +205,40 @@ export async function eliminar(id) {
   return resultado.rowCount > 0;
 }
 
-/** @returns {Promise<object>} Metricas agregadas para la vista de resumen. */
-export async function resumen() {
-  return queryOne(`
+/**
+ * Metricas agregadas para la vista de resumen.
+ *
+ * El filtro por usuario es OPCIONAL y lo decide el servidor segun el rol:
+ * un Analista solo puede ver las metricas de sus propias cotizaciones, igual
+ * que en el listado del historial. Sin filtro (`usuarioId = null`) las metricas
+ * son las de toda la organizacion, que es lo que corresponde a Jefatura.
+ *
+ * @param {number|null} usuarioId - id del usuario a aislar, o null para el total general.
+ * @returns {Promise<object>} Metricas agregadas.
+ */
+export async function resumen(usuarioId = null) {
+  const valores = [];
+  const condiciones = [];
+
+  if (usuarioId !== null && usuarioId !== undefined) {
+    condiciones.push('usuario_id = $1');
+    valores.push(usuarioId);
+  }
+
+  const where = condiciones.length > 0 ? `WHERE ${condiciones.join(' AND ')}` : '';
+
+  return queryOne(
+    `
     SELECT
       COUNT(*)                              AS total_cotizaciones,
       COALESCE(SUM(toneladas), 0)           AS toneladas_totales,
       COALESCE(SUM(cantidad_contenedores), 0) AS contenedores_totales,
       COALESCE(SUM(costo_total_usd), 0)     AS facturacion_total_usd
     FROM cotizaciones_log
-  `);
+    ${where}
+  `,
+    valores,
+  );
 }
 
 /** @returns {Promise<number>} total de registros, para el seed. */

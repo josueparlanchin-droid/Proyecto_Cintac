@@ -202,6 +202,7 @@ export default function Historial() {
           <div className="stat stat--acento">
             <div className="stat__etiqueta">Cotizaciones</div>
             <div className="stat__valor">{formatearEntero(metricas.total_cotizaciones)}</div>
+            <div className="stat__detalle">{esAdmin ? 'De todo el equipo' : 'Solo las suyas'}</div>
           </div>
           <div className="stat stat--info">
             <div className="stat__etiqueta">Toneladas totales</div>

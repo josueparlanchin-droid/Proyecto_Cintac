@@ -1137,6 +1137,51 @@ async function main() {
     { mostrar: (c) => `${c.datos.total_cotizaciones} cotizaciones, ${c.datos.contenedores_totales} contenedores, USD ${c.datos.facturacion_total_usd}` },
   );
 
+  // El resumen de metricas debe seguir la misma regla de aislamiento que el
+  // listado: un Analista ve sus propias cifras y no las de la organizacion.
+  // La comparacion es entre dos respuestas (admin y analista), asi que se
+  // cuenta a mano en vez de pasar por `comprobar`, que espera una peticion.
+  const [resumenAdmin, resumenAnalista, totalHistorialAdmin, totalHistorialAnalista] =
+    await Promise.all([
+      fetch(`${BASE}/cotizaciones/resumen`, {
+        headers: { Authorization: `Bearer ${tokenAdmin}` },
+      }).then((r) => r.json()),
+      fetch(`${BASE}/cotizaciones/resumen`, {
+        headers: { Authorization: `Bearer ${tokenAnalista}` },
+      }).then((r) => r.json()),
+      fetch(`${BASE}/cotizaciones/historial?pagina=1&porPagina=1`, {
+        headers: { Authorization: `Bearer ${tokenAdmin}` },
+      }).then((r) => r.json()),
+      fetch(`${BASE}/cotizaciones/historial?pagina=1&porPagina=1`, {
+        headers: { Authorization: `Bearer ${tokenAnalista}` },
+      }).then((r) => r.json()),
+    ]);
+
+  total += 1;
+  const resumenAislado =
+    resumenAdmin.datos.total_cotizaciones === totalHistorialAdmin.paginacion.total &&
+    resumenAnalista.datos.total_cotizaciones === totalHistorialAnalista.paginacion.total &&
+    resumenAnalista.datos.total_cotizaciones <= resumenAdmin.datos.total_cotizaciones;
+  if (!resumenAislado) fallos += 1;
+  console.log(`  ${resumenAislado ? '  OK   ' : ' [FALLA]'} El resumen respeta el aislamiento por rol`);
+  console.log(
+    `          admin: ${resumenAdmin.datos.total_cotizaciones} cotizaciones (su historial: ${totalHistorialAdmin.paginacion.total}) | ` +
+      `analista: ${resumenAnalista.datos.total_cotizaciones} cotizaciones (su historial: ${totalHistorialAnalista.paginacion.total})`,
+  );
+
+  total += 1;
+  const facturacionAislada =
+    resumenAnalista.datos.facturacion_total_usd <= resumenAdmin.datos.facturacion_total_usd &&
+    (resumenAnalista.datos.total_cotizaciones === resumenAdmin.datos.total_cotizaciones ||
+      resumenAnalista.datos.facturacion_total_usd < resumenAdmin.datos.facturacion_total_usd);
+  if (!facturacionAislada) fallos += 1;
+  console.log(
+    `  ${facturacionAislada ? '  OK   ' : ' [FALLA]'} El Analista no ve la facturacion de toda la organizacion`,
+  );
+  console.log(
+    `          admin: USD ${resumenAdmin.datos.facturacion_total_usd} | analista: USD ${resumenAnalista.datos.facturacion_total_usd}`,
+  );
+
   // ---------------- 8. DELETE por ADMIN ----------------
   console.log('\n13. ELIMINACION (solo ADMIN_COMEX)');
 

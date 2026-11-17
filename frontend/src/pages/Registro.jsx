@@ -94,7 +94,7 @@ export default function Registro() {
     setEnviando(true);
 
     try {
-      const perfil = await registrar({
+      const resultado = await registrar({
         nombre: formulario.nombre.trim(),
         email: formulario.email.trim(),
         codigoInvitacion: formulario.codigoInvitacion.trim(),
@@ -102,7 +102,14 @@ export default function Registro() {
         passwordRepeticion: formulario.passwordRepeticion,
       });
 
-      setExito('Solicitud enviada. Pendiente de aprobación por Jefatura Comex.');
+      // El alta normal queda pendiente de aprobacion y no abre sesion; si
+      // el backend devolviera una cuenta ya activa, se informaria el acceso
+      // inmediato. El mensaje depende del desenlace real, no de una suposicion.
+      setExito(
+        resultado?.pendiente
+          ? 'Solicitud enviada. Pendiente de aprobación por Jefatura Comex.'
+          : 'Cuenta creada correctamente. Ya puede comenzar a cotizar.',
+      );
       setFormulario({
         nombre: '',
         email: '',

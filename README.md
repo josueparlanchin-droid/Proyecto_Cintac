@@ -218,7 +218,11 @@ Quien llega a la aplicación sin cuenta usa **/registro** y necesita
 - La contraseña exige 8 a 128 caracteres, mayúscula, minúscula, número y
   carácter especial, sin espacios.
 - Quien se registra queda **pendiente de aprobación**: la respuesta no trae token
-  y el login se bloquea hasta que Jefatura Comex aprueba la solicitud.
+  y el login se bloquea hasta que Jefatura Comex aprueba la solicitud. Como no
+  hay token, la pantalla de registro **no abre sesión**: confirma "Solicitud
+  enviada" y limpia el formulario. Guardar ese token inexistente y pedir
+  después `/auth/me` devolvía un 401 que se mostraba como error aunque el alta
+  sí se hubiera hecho y la solicitud sí hubiera llegado a Jefatura.
 
 ### Administración de cuentas (Jefatura Comex)
 
@@ -259,7 +263,10 @@ servidor. Es el precio de que "desactivar" signifique algo.
   vigencia de la cuenta comprobada contra la base en cada petición.
 - Control de acceso por rol en el **backend** (ocultar un botón no es
   seguridad: el Analysta recibe 403 aunque llame a la API directamente).
-- Aislamiento del historial: un Analista solo recupera sus propias cotizaciones.
+- Aislamiento del historial: un Analista solo recupera sus propias cotizaciones,
+  y las **métricas** de la cabecera respetan la misma regla: `/resumen` inyecta
+  el `usuario_id` en el servidor, así que el Analista ve sus toneladas y su
+  facturación, no las de toda la organización.
 - Todas las consultas SQL usan parámetros, sin concatenar entrada del usuario.
 - Validación de entrada con Zod en los endpoints que reciben datos.
 - Rate limiting con límites distintos para login y para el resto de la API.
@@ -338,11 +345,12 @@ npm run verificar:api    # solo la API
 ```
 
 - `frontend/scripts/verificar-frontend.js` maneja Chrome Headless por el
-  protocolo DevTools y comprueba 69 casos reales de interfaz: montaje, login,
+  protocolo DevTools y comprueba 73 casos reales de interfaz: montaje, login,
   conversión kg→tn en vivo, cálculo, PDF, historial, permisos del Analista,
-  persistencia de sesión y ausencia de errores en consola.
+  alta real de usuario pendiente de aprobación, persistencia de sesión y
+  ausencia de errores de consola.
 - `backend/scripts/verificar-api.js` recorre los endpoints de extremo a extremo y
-  comprueba 123 casos, incluidos los límites de 23 tn (20 pies) y 25 tn
+  comprueba 125 casos, incluidos los límites de 23 tn (20 pies) y 25 tn
   (40 pies), la selección automática por costo, las rutas Chile → Callao, el
   registro pendiente de aprobación, el aislamiento por rol y el rate limiting.
 
@@ -350,6 +358,29 @@ npm run verificar:api    # solo la API
 > el cupo de 20 intentos de login para comprobar el bloqueo. Si la ejecutas por
 > separado, **reinicia el backend** antes de volver a iniciar sesión desde el
 > navegador: los contadores viven en memoria.
+
+El alta real del navegador solo se ejecuta si la suite recibe el código de
+invitación por variable de entorno:
+
+```bash
+# PowerShell
+$env:REGISTRATION_CODE='un-codigo-de-prueba'; npm run verificar:web
+```
+
+Sin esa variable la comprobación se omite y se avisa, porque el backend
+responde `403` al registro cuando `REGISTRATION_CODE` no está definida.
+
+### Limpiar las cuentas que crean las pruebas
+
+Las suites de verificación dan de alta usuarios reales (para comprobar el
+registro y la aprobación). Para borrarlos y dejar la base como estaba:
+
+```bash
+npm run limpiar:pruebas
+```
+
+El script **solo** borra cuentas cuyo correo casa con `verificacion.%`,
+`prueba.%` o `test.%`; con cualquier otro patrón se niega a correr.
 
 `npm run build` genera el bundle de producción en `frontend/dist`.
 

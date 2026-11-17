@@ -763,6 +763,100 @@ async function main() {
     const textoRegistro = (await evaluar(`document.body.innerText`)) ?? '';
     comprobar('La pantalla ofrece volver al inicio de sesion', /Iniciar sesion/i.test(textoRegistro));
 
+    // ---------------- Alta real: el caso que mas se rompio ----------------
+    //
+    // El bug que motiva esta comprobacion: el backend responde 201 con
+    // `{ pendiente: true }` y SIN token, porque la cuenta nace con
+    // `activo = FALSE`. El frontend asumia que si habia token, lo guardaba y
+    // pedia despues /auth/me; ese 401 final se mostraba como ERROR aunque el
+    // alta se hubiera hecho bien y la solicitud SI llegara a Jefatura.
+    //
+    // Solo se puede ejecutar con REGISTRATION_CODE configurado en el entorno
+    // de esta suite: sin el, la comprobacion se omite y se avisa.
+    const codigoRegistro = process.env.REGISTRATION_CODE ?? '';
+
+    if (!codigoRegistro) {
+      console.log('          (omitida: defina REGISTRATION_CODE para probar el alta real)');
+    } else {
+      const correoPrueba = `verificacion.registro.${Date.now()}@cintac.cl`;
+
+      await llenar([
+        ['nombre', 'Verificacion Registro'],
+        ['email-registro', correoPrueba],
+        ['codigoInvitacion', codigoRegistro],
+        ['password-registro', 'Verificacion#2026'],
+        ['passwordRepeticion', 'Verificacion#2026'],
+      ]);
+      await new Promise((r) => setTimeout(r, 400));
+
+      const botonListo = await evaluar(`
+        (() => {
+          const boton = [...document.querySelectorAll('button[type="submit"]')][0];
+          return boton ? !boton.disabled : null;
+        })()
+      `);
+      comprobar(
+        'El boton de alta se habilita con los cinco campos completos',
+        botonListo === true,
+        `habilitado=${botonListo}`,
+      );
+
+      await evaluar(`document.querySelector('form').requestSubmit(), true`);
+      await new Promise((r) => setTimeout(r, 2000));
+
+      const resultadoAlta = await evaluar(`
+        (() => {
+          const alertaError = document.querySelector('.alerta--error');
+          const alertaExito = document.querySelector('.alerta--exito');
+          return {
+            error: alertaError ? alertaError.innerText.replace(/\\s+/g, ' ').trim() : '',
+            exito: alertaExito ? alertaExito.innerText.replace(/\\s+/g, ' ').trim() : '',
+            token: window.localStorage.getItem('cintac_comex_token'),
+          };
+        })()
+      `);
+
+      comprobar(
+        'El alta pendiente confirma la solicitud en vez de mostrar un error',
+        resultadoAlta.exito.includes('Solicitud enviada') && resultadoAlta.error === '',
+        `exito="${resultadoAlta.exito}" error="${resultadoAlta.error}"`,
+      );
+
+      comprobar(
+        'El alta pendiente NO abre sesion (no queda token en el navegador)',
+        !resultadoAlta.token,
+        `token=${resultadoAlta.token === null ? 'ausente' : `"${resultadoAlta.token}"`}`,
+      );
+
+      // Y desde el lado de la API: la solicitud tiene que estar esperando la
+      // aprobacion. Si el alta se perdiera, Jefatura no tendria nada que
+      // aprobar y el usuario se quedaria sin feedback.
+      const sesionAdmin = await (
+        await fetch(`${API}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'jefe@cintac.cl', password: 'Jefatura2026' }),
+        })
+      ).json();
+
+      const listado = await (
+        await fetch(`${API}/api/v1/usuarios`, {
+          headers: { Authorization: `Bearer ${sesionAdmin.datos.token}` },
+        })
+      ).json();
+
+      const solicitud = listado.datos.usuarios.find((u) => u.email === correoPrueba);
+      comprobar(
+        'La solicitud llega a la bandeja de solicitudes pendientes de Jefatura',
+        Boolean(solicitud) && solicitud.activo === false,
+        `cuenta=${solicitud ? `encontrada (activo=${solicitud.activo})` : 'NO ENCONTRADA'}`,
+      );
+
+      console.log(
+        `          (cuenta de prueba: ${correoPrueba} -> se elimina con "npm run limpiar:pruebas")`,
+      );
+    }
+
     // ==================================================================
     console.log('\n10. PERSISTENCIA DE SESION AL RECARGAR');
     // ==================================================================

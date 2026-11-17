@@ -14,7 +14,8 @@
     "start": "npm run start --prefix backend",
     "verificar": "npm run verificar:web && npm run verificar:api",
     "verificar:api": "npm run verificar --prefix backend",
-    "verificar:web": "npm run verificar --prefix frontend"
+    "verificar:web": "npm run verificar --prefix frontend",
+    "limpiar:pruebas": "npm run limpiar:pruebas --prefix backend"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"
